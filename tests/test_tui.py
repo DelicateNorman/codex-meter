@@ -6,6 +6,7 @@ import unittest
 from codex_meter.interactive import (
     COMMAND_ITEMS,
     InteractiveState,
+    _project_picker_text,
     _read_key,
     _sync_projects,
     handle_key,
@@ -121,6 +122,8 @@ class TuiTests(unittest.TestCase):
         self.assertIn("▶ /history week", rendered)
         self.assertIn("Show weekly usage history", rendered)
         self.assertTrue(all(item.description.isascii() for item in COMMAND_ITEMS))
+        self.assertNotIn("dashboard", rendered)
+        self.assertLessEqual(len(rendered.splitlines()), 30)
 
     def test_project_order_from_storage_is_preserved_and_deduplicated(self) -> None:
         state = InteractiveState(project_filter="older")
@@ -184,6 +187,75 @@ class TuiTests(unittest.TestCase):
         self.assertIn("Project", rendered)
         self.assertTrue(all(len(line) <= 132 for line in lines))
         self.assertNotEqual(lines[-1], "● Month")
+
+    def test_slash_palette_fits_a_twelve_line_terminal(self) -> None:
+        state = InteractiveState()
+        handle_key(state, "/")
+        rendered = render_interactive_screen(
+            state,
+            "dashboard should be hidden",
+            width=80,
+            height=12,
+            color=False,
+            clear=False,
+        )
+        self.assertLessEqual(len(rendered.splitlines()), 12)
+        self.assertIn("View today's usage", rendered)
+        self.assertNotIn("dashboard should be hidden", rendered)
+
+    def test_short_dashboard_keeps_summary_instead_of_separator_rows(self) -> None:
+        body = "\n".join((
+            "╭" + "─" * 20 + "╮",
+            "│ OVERVIEW             │",
+            "├" + "─" * 20 + "┤",
+            "│ TOKENS 123           │",
+            "├" + "─" * 20 + "┤",
+            "│ details              │",
+            "╰" + "─" * 20 + "╯",
+        ))
+        rendered = render_interactive_screen(
+            InteractiveState(),
+            body,
+            width=80,
+            height=12,
+            color=False,
+            clear=False,
+        )
+        self.assertIn("TOKENS 123", rendered)
+        self.assertIn("terminal too short", rendered)
+        self.assertIn("╰────────────────────╯", rendered)
+
+    def test_narrow_terminal_uses_compact_navigation_without_overflow(self) -> None:
+        rendered = render_interactive_screen(
+            InteractiveState(),
+            "x" * 100,
+            width=40,
+            height=12,
+            color=False,
+            clear=False,
+        )
+        lines = rendered.splitlines()
+        self.assertLessEqual(len(lines), 12)
+        self.assertTrue(all(len(line) <= 40 for line in lines))
+        self.assertIn("40 columns available · 80 required", rendered)
+        self.assertIn("Menu 1/12 · ▶ Today", rendered)
+
+    def test_project_picker_adapts_page_size_to_short_terminals(self) -> None:
+        state = InteractiveState(project_options=tuple(f"project-{index}" for index in range(10)))
+        parse_slash_command(state, "project")
+        body = _project_picker_text(state, 40, page_size=3)
+        rendered = render_interactive_screen(
+            state,
+            body,
+            width=40,
+            height=12,
+            color=False,
+            clear=False,
+        )
+        self.assertLessEqual(len(rendered.splitlines()), 12)
+        self.assertIn("Projects 1-3/11 · ↑/↓ · Enter · Esc", rendered)
+        self.assertIn("All projects", rendered)
+        self.assertNotIn("project-2", rendered)
 
     def test_history_renderer_is_compact_and_handles_unknown_cost(self) -> None:
         rendered = render_history(

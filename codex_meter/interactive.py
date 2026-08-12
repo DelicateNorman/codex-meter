@@ -158,30 +158,55 @@ def render_interactive_screen(
     title = "CODEX METER · INTERACTIVE"
     menu = _menu_lines(state, layout_width, color)
     if state.command_mode:
-        controls = "Slash input · ↑/↓ choose · Enter run · Esc back"
+        controls = (
+            "Type · ↑/↓ choose · Enter run · Esc back"
+            if layout_width < 60
+            else "Slash input · ↑/↓ choose · Enter run · Esc back"
+        )
     elif state.project_picker:
         controls = "Project scope · ↑/↓ choose · Enter/Space apply · Esc cancel"
     else:
-        controls = "Arrows choose · Enter/Space open · / commands · r refresh · q quit"
+        controls = (
+            "Arrows · Enter open · / menu · q quit"
+            if layout_width < 80
+            else "Arrows choose · Enter/Space open · / commands · r refresh · q quit"
+        )
     prompt = f"/{state.command_text}▌"
     header = [
         _style(title, CYAN, color),
         _style("─" * layout_width, BLUE, color),
     ]
-    body = _help_text(layout_width) if state.show_help else content
+    if state.command_mode:
+        body = "\n".join(_command_palette_lines(state, layout_width, color))
+    elif state.show_help:
+        body = _help_text(layout_width)
+    elif width < 80 and not state.project_picker:
+        body = _narrow_terminal_text(width)
+    else:
+        body = content
     body_lines = body.splitlines()
     status = f"Scope · {_scope_label(state)}"
     if _show_message_in_status(state):
         status += f"  │  {state.message}"
-    footer = [
-        _style("─" * layout_width, BLUE, color),
-        _style(status[:layout_width], GREEN, color),
-        *menu,
-        _style(controls[:layout_width], MUTED, color),
-    ]
     if state.command_mode:
-        footer.extend(_command_palette_lines(state, layout_width, color))
-        footer.append(_style(prompt[:layout_width], LIGHT, color))
+        footer = [
+            _style("─" * layout_width, BLUE, color),
+            _style(controls[:layout_width], MUTED, color),
+            _style(prompt[:layout_width], LIGHT, color),
+        ]
+    elif state.project_picker or state.show_help:
+        footer = [
+            _style("─" * layout_width, BLUE, color),
+            _style(status[:layout_width], GREEN, color),
+            _style(controls[:layout_width], MUTED, color),
+        ]
+    else:
+        footer = [
+            _style("─" * layout_width, BLUE, color),
+            _style(status[:layout_width], GREEN, color),
+            *menu,
+            _style(controls[:layout_width], MUTED, color),
+        ]
     available = max(1, height - len(header) - len(footer))
     clipped = _clip_body(body_lines, available, layout_width, color)
     prefix = "\x1b[H\x1b[2J" if clear else ""
@@ -210,11 +235,18 @@ def run_interactive(
         tty.setcbreak(fd)
         while state.running:
             size = shutil.get_terminal_size((110, 30))
-            content = (
-                _project_picker_text(state, size.columns)
-                if state.project_picker
-                else render_content(state.active_view, size.columns, color, state.project_filter)
-            )
+            if state.project_picker:
+                content = _project_picker_text(
+                    state,
+                    size.columns,
+                    page_size=max(1, min(8, size.lines - 9)),
+                )
+            elif state.command_mode or state.show_help:
+                content = ""
+            else:
+                content = render_content(
+                    state.active_view, size.columns, color, state.project_filter,
+                )
             output_stream.write(
                 render_interactive_screen(
                     state,
@@ -374,6 +406,10 @@ def _label_for(key: str) -> str:
 
 
 def _menu_lines(state: InteractiveState, width: int, color: bool) -> list[str]:
+    if width < 80:
+        item = MENU_ITEMS[state.selected]
+        return [_style(f"Menu {state.selected + 1}/{len(MENU_ITEMS)} · ▶ {item.label}"[:width], CYAN, color)]
+
     tokens: list[str] = []
     for index, item in enumerate(MENU_ITEMS):
         active = item.key == state.active_view or (item.key == "project" and state.project_picker)
@@ -423,13 +459,14 @@ def _command_palette_lines(
     page_start = selected // page_size * page_size
     page = suggestions[page_start : page_start + page_size]
     page_end = page_start + len(page)
-    lines = [
-        _style(
-            f"Commands · {page_start + 1}-{page_end} of {len(suggestions)} · ↑/↓ choose · Enter run · Esc back"[:width],
-            MUTED,
-            color,
+    if width < 60:
+        heading = f"Commands {page_start + 1}-{page_end}/{len(suggestions)} · ↑/↓ · Enter · Esc"
+    else:
+        heading = (
+            f"Commands · {page_start + 1}-{page_end} of {len(suggestions)} · "
+            "↑/↓ choose · Enter run · Esc back"
         )
-    ]
+    lines = [_style(heading[:width], MUTED, color)]
     for offset, item in enumerate(page):
         index = page_start + offset
         marker = "▶" if index == selected else " "
@@ -444,10 +481,17 @@ def _project_picker_text(state: InteractiveState, width: int, *, page_size: int 
     page_start = selected // page_size * page_size
     page = choices[page_start : page_start + page_size]
     page_end = page_start + len(page)
+    if width < 60:
+        heading = f"Projects {page_start + 1}-{page_end}/{len(choices)} · ↑/↓ · Enter · Esc"
+    else:
+        heading = (
+            f"Projects · {page_start + 1}-{page_end} of {len(choices)} · "
+            "↑/↓ choose · Enter apply · Esc cancel"
+        )
     lines = [
         "Choose project scope",
         "",
-        f"Projects · {page_start + 1}-{page_end} of {len(choices)} · ↑/↓ choose · Enter apply · Esc cancel",
+        heading[:width],
         "─" * min(width, 88),
     ]
     for offset, project in enumerate(page):
@@ -469,6 +513,14 @@ def _safe_label(value: str) -> str:
     return "".join(character for character in str(value) if character.isprintable()).strip()[:96]
 
 
+def _narrow_terminal_text(width: int) -> str:
+    return "\n".join((
+        "Terminal too narrow for the dashboard"[:width],
+        f"{width} columns available · 80 required"[:width],
+        "Resize to see stats; keys still work."[:width],
+    ))
+
+
 def _show_message_in_status(state: InteractiveState) -> bool:
     return bool(
         state.message
@@ -485,7 +537,11 @@ def _clip_body(lines: list[str], available: int, width: int, color: bool) -> lis
         return [warning]
     closing_frame = lines[-1] if "╰" in lines[-1] and "╯" in lines[-1] else None
     if closing_frame is not None and available >= 2:
-        return [*lines[: available - 2], warning, closing_frame]
+        compact = [
+            line for line in lines[:-1]
+            if not ("├" in line and "┤" in line)
+        ]
+        return [*compact[: available - 2], warning, closing_frame]
     return [*lines[: available - 1], warning]
 
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codex-meter"
-version = "0.12.1"
+version = "0.12.2"
 description = "Local-first usage and performance observability for Codex CLI"
 readme = "README.md"
 requires-python = ">=3.11"
