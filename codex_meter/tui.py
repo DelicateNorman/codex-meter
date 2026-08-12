@@ -54,6 +54,22 @@ def render_overview(
     lines.append(frame(title, CYAN))
     lines.append(styled("├" + "─" * (inner - 1) + "┤", BLUE))
 
+    if weekly_quotas is not None:
+        if weekly_quotas:
+            lines.append(frame("ACCOUNT WEEKLY LIMITS", MUTED, True))
+            quota_bar_width = max(16, min(40, width - 34))
+            for quota in weekly_quotas:
+                style = GREEN if quota.remaining_percent > 25 else YELLOW
+                for quota_line in _weekly_quota_lines(quota, quota_bar_width):
+                    lines.append(frame(quota_line, style, True))
+        else:
+            lines.append(frame(
+                quota_message or "ACCOUNT WEEKLY LIMITS  No seven-day quota was provided for this account",
+                YELLOW,
+                True,
+            ))
+        lines.append(styled("├" + "─" * (inner - 1) + "┤", BLUE))
+
     input_tokens = _int(overview.get("input_tokens"))
     cached = _int(overview.get("cached_input_tokens"))
     cache_write = _int(overview.get("cache_write_tokens"))
@@ -91,25 +107,26 @@ def render_overview(
         f"Avg E2E {_duration(overview.get('avg_e2e_ms'))}"
     )
     lines.append(frame(latency, MUTED, True))
-    if weekly_quotas is not None:
-        if weekly_quotas:
-            for quota in weekly_quotas:
-                style = GREEN if quota.remaining_percent > 25 else YELLOW
-                lines.append(frame(_weekly_quota_line(quota), style, True))
-        else:
-            lines.append(frame(
-                quota_message or "WEEKLY LIMIT  No seven-day quota was provided for this account",
-                YELLOW,
-                True,
-            ))
     if unpriced:
         lines.append(frame(f"△ {unpriced} call(s) have unknown pricing; cost excludes them", YELLOW, True))
 
     lines.append(styled("├" + "─" * (inner - 1) + "┤", BLUE))
-    bar_width = max(20, min(48, width - 38))
-    lines.append(frame(_bar_line("Input", input_tokens, input_tokens, bar_width), CYAN))
-    lines.append(frame(_bar_line("Cached", cached, input_tokens, bar_width), BLUE))
-    lines.append(frame(_bar_line("Reasoning", reasoning, max(output, 1), bar_width), CYAN))
+    bar_width = max(16, min(48, width - 56))
+    lines.append(frame(
+        _bar_line("Input total", input_tokens, input_tokens, bar_width, "total input"),
+        CYAN,
+    ))
+    lines.append(frame(
+        _bar_line("Cached input", cached, input_tokens, bar_width, f"{hit_rate:.1f}% of input"),
+        BLUE,
+    ))
+    lines.append(frame(
+        _bar_line(
+            "Reasoning out", reasoning, max(output, 1), bar_width,
+            f"{reasoning_rate:.1f}% of output",
+        ),
+        CYAN,
+    ))
     lines.append(styled("├" + "─" * (inner - 1) + "┤", BLUE))
     header = f"{'MODEL':<25} {'EFFORT':<9} {'CALLS':>6} {'TOKENS':>10} {'CACHE':>7} {'REASON':>10} {'COST':>10}"
     lines.append(frame(header, MUTED))
@@ -303,18 +320,26 @@ def _rate_summary(label: str, values: Sequence[float]) -> str:
     )
 
 
-def _bar_line(label: str, value: int, maximum: int, width: int) -> str:
+def _bar_line(label: str, value: int, maximum: int, width: int, meaning: str) -> str:
     ratio = min(1.0, value / maximum) if maximum else 0
     filled = round(width * ratio)
-    return f"{label:<10} {'█' * filled}{'░' * (width - filled)}  {_tokens(value):>9}  {ratio * 100:5.1f}%"
-
-
-def _weekly_quota_line(quota: WeeklyQuota) -> str:
-    reset = _reset_time(quota.resets_at)
-    name = _fit_display(quota.name, 20)
     return (
-        f"WEEKLY LIMIT  {name} · {quota.used_percent}% used · "
-        f"{quota.remaining_percent}% left · reset {reset}"
+        f"{label:<14} {'█' * filled}{'░' * (width - filled)}  "
+        f"{_tokens(value):>9}  {meaning}"
+    )
+
+
+def _weekly_quota_lines(quota: WeeklyQuota, bar_width: int) -> tuple[str, str]:
+    reset = _reset_time(quota.resets_at)
+    name = _fit_display(quota.name, 28)
+    bar_width = max(1, bar_width)
+    used = round(bar_width * quota.used_percent / 100)
+    if quota.used_percent and not used:
+        used = 1
+    bar = "█" * used + "░" * (bar_width - used)
+    return (
+        f"{name}  ·  {quota.remaining_percent}% left  ·  reset {reset}",
+        f"Used  {bar}  {quota.used_percent:>3}%",
     )
 
 

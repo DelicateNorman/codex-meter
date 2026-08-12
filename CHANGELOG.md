@@ -2,6 +2,14 @@
 
 All notable changes to Codex Meter are documented here.
 
+## [0.14.1] - 2026-08-12
+
+- Render each live seven-day account quota as a prominent usage bar at the top of the dashboard.
+- Keep weekly quotas visible when a short terminal clips lower dashboard sections.
+- Show the concrete App Server error when live quotas are unavailable.
+- Replace the ambiguous token percentages with `total input`, `% of input`, and `% of output` labels.
+- Add width and clipping regressions for 80-, 100-, and 132-column terminal layouts.
+
 ## [0.14.0] - 2026-08-12
 
 - Add native interactive keyboard handling and ANSI console setup for Windows.
@@ -76,6 +84,7 @@ First public Linux release.
 - Versioned API-equivalent pricing with unknown prices shown as `N/A`.
 - One-line, no-sudo Linux installer.
 
+[0.14.1]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.14.1
 [0.14.0]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.14.0
 [0.13.0]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.13.0
 [0.12.4]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.12.4

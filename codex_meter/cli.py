@@ -409,9 +409,9 @@ def _interactive_dashboard(storage: Storage, catalog: PricingCatalog, *, color: 
         nonlocal weekly_quotas, quota_message
         try:
             weekly_quotas = read_weekly_quotas()
-        except QuotaUnavailable:
+        except QuotaUnavailable as error:
             weekly_quotas = ()
-            quota_message = "WEEKLY LIMIT  Unavailable · press r to retry"
+            quota_message = f"ACCOUNT WEEKLY LIMITS  Unavailable · {error} · press r to retry"
         else:
             quota_message = None
 

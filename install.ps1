@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Version = $(if ($env:CODEX_METER_VERSION) { $env:CODEX_METER_VERSION } else { "v0.14.0" }),
+    [string]$Version = $(if ($env:CODEX_METER_VERSION) { $env:CODEX_METER_VERSION } else { "v0.14.1" }),
     [string]$BinDir = $(if ($env:CODEX_METER_BIN_DIR) { $env:CODEX_METER_BIN_DIR } else { Join-Path $env:LOCALAPPDATA "Programs\CodexMeter\bin" }),
     [string]$BaseUrl = $env:CODEX_METER_BASE_URL
 )

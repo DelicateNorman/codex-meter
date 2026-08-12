@@ -33,11 +33,39 @@ class TuiTests(unittest.TestCase):
                 WeeklyQuota("spark", "Codex Spark", 0, 1787129518, 10080, "pro"),
             ),
         )
-        self.assertIn("WEEKLY LIMIT  Codex", rendered)
-        self.assertIn("15% used · 85% left", rendered)
-        self.assertIn("WEEKLY LIMIT  Codex Spark", rendered)
+        self.assertIn("ACCOUNT WEEKLY LIMITS", rendered)
+        self.assertIn("Codex  ·  85% left", rendered)
+        self.assertIn("Used  ██████░", rendered)
+        self.assertIn("15%", rendered)
+        self.assertIn("Codex Spark", rendered)
         self.assertIn("reset", rendered)
         self.assertTrue(all(tui_display_width(line) <= 100 for line in rendered.splitlines()))
+
+    def test_weekly_quota_bars_show_zero_and_full_usage(self) -> None:
+        rendered = render_overview(
+            {}, [], period="TODAY", color=False, width=80,
+            weekly_quotas=(
+                WeeklyQuota("free", "Unused", 0, None, 10080),
+                WeeklyQuota("full", "Exhausted", 100, None, 10080),
+            ),
+        )
+        self.assertIn("Used  ░░░░░░░░░░░░░░░░", rendered)
+        self.assertIn("Used  ████████████████", rendered)
+        self.assertIn("0% left", rendered)
+        self.assertTrue(all(tui_display_width(line) <= 80 for line in rendered.splitlines()))
+
+    def test_weekly_quota_bar_stays_visible_on_a_short_screen(self) -> None:
+        body = render_overview(
+            {}, [], period="TODAY", color=False, width=100,
+            weekly_quotas=(WeeklyQuota("codex", "Codex", 18, None, 10080),),
+        )
+        rendered = render_interactive_screen(
+            InteractiveState(), body, width=100, height=16, color=False, clear=False,
+        )
+        self.assertIn("ACCOUNT WEEKLY LIMITS", rendered)
+        self.assertIn("Used  █", rendered)
+        self.assertIn("82% left", rendered)
+        self.assertIn("terminal too short", rendered)
 
     def test_dashboard_explains_when_weekly_quota_is_unavailable(self) -> None:
         rendered = render_overview(
@@ -54,6 +82,28 @@ class TuiTests(unittest.TestCase):
         self.assertIn("No Codex usage found", rendered)
         self.assertIn("press r here to refresh", rendered)
         self.assertNotIn("\x1b", rendered)
+
+    def test_token_ratio_labels_explain_their_denominators(self) -> None:
+        rendered = render_overview(
+            {
+                "input_tokens": 1000,
+                "cached_input_tokens": 800,
+                "output_tokens": 100,
+                "reasoning_tokens": 25,
+            },
+            [],
+            period="TEST",
+            color=False,
+            width=80,
+        )
+        self.assertIn("Input total", rendered)
+        self.assertIn("total input", rendered)
+        self.assertIn("Cached input", rendered)
+        self.assertIn("80.0% of input", rendered)
+        self.assertIn("Reasoning out", rendered)
+        self.assertIn("25.0% of output", rendered)
+        self.assertNotIn("100.0%", rendered)
+        self.assertTrue(all(tui_display_width(line) <= 80 for line in rendered.splitlines()))
 
     def test_arrow_enter_and_space_navigate_views(self) -> None:
         state = InteractiveState()
