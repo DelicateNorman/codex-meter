@@ -30,6 +30,19 @@ def wait_for(read_chunk, expected: str, timeout: float = 12.0) -> str:
     raise AssertionError(f"PTY output did not contain {expected!r}; tail={output[-1000:]!r}")
 
 
+def assert_crlf_rows(output: str) -> None:
+    """Raw-mode screen rows must explicitly return to column zero."""
+    bare_line_feeds = [
+        index for index, character in enumerate(output)
+        if character == "\n" and (index == 0 or output[index - 1] != "\r")
+    ]
+    if bare_line_feeds:
+        raise AssertionError(
+            "interactive screen emitted bare LF in raw mode; rows will drift "
+            f"horizontally on macOS Terminal (first offset: {bare_line_feeds[0]})"
+        )
+
+
 def run_posix(binary: Path, home: Path, codex_home: Path) -> None:
     import fcntl
     import pty
@@ -57,7 +70,8 @@ def run_posix(binary: Path, home: Path, codex_home: Path) -> None:
         return os.read(master, 65536).decode("utf-8", errors="replace")
 
     try:
-        wait_for(read_chunk, "▶ Today")
+        initial_screen = wait_for(read_chunk, "▶ Today")
+        assert_crlf_rows(initial_screen)
         os.write(master, b"\x1b[C")
         wait_for(read_chunk, "▶ Week")
         os.write(master, b"/")

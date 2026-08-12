@@ -5,7 +5,7 @@ This document is the acceptance specification for rewriting Codex Meter 0.15.0 i
 ## Verification snapshot (2026-08-12)
 
 The Rust implementation has merged into `main` and is prepared as the
-v0.16.0-beta.1 candidate. The checkboxes below remain the stricter stable-release
+v0.16.0-beta.2 candidate. The checkboxes below remain the stricter stable-release
 gate; they are deliberately not mass-checked merely because the implementation
 compiles.
 

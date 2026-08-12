@@ -2,7 +2,7 @@
 set -eu
 
 repository="DelicateNorman/codex-meter"
-version="${CODEX_METER_VERSION:-v0.16.0-beta.1}"
+version="${CODEX_METER_VERSION:-v0.16.0-beta.2}"
 bin_dir="${CODEX_METER_BIN_DIR:-$HOME/.local/bin}"
 rollback=0
 

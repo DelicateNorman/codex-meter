@@ -2,6 +2,14 @@
 
 All notable changes to Codex Meter are documented here.
 
+## [0.16.0-beta.2] - 2026-08-12
+
+### Fixed
+
+- Render interactive rows with explicit CRLF line endings in raw mode, fixing
+  severe horizontal row drift in macOS Terminal.
+- Extend native PTY acceptance coverage so bare line feeds fail before release.
+
 ## [0.16.0-beta.1] - 2026-08-12
 
 - Rewrite the application runtime in Rust while retaining the v0.15 command surface, SQLite schema, configuration, pricing, privacy rules, and reports.
@@ -112,6 +120,7 @@ First public Linux release.
 - Versioned API-equivalent pricing with unknown prices shown as `N/A`.
 - One-line, no-sudo Linux installer.
 
+[0.16.0-beta.2]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.0-beta.2
 [0.16.0-beta.1]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.0-beta.1
 [0.15.0]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.15.0
 [0.14.2]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.14.2

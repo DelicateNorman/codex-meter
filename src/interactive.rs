@@ -470,7 +470,14 @@ pub fn render_interactive_screen(
     let body_lines: Vec<String> = body.lines().map(str::to_owned).collect();
     let clipped = clip_body(&body_lines, available, layout_width, color);
     let prefix = if clear { "\x1b[H\x1b[2J" } else { "" };
-    format!("{prefix}{}", [header, clipped, footer].concat().join("\n"))
+    // Raw mode disables the terminal driver's newline translation. A bare LF
+    // only moves the cursor down on terminals such as macOS Terminal, leaving
+    // the next row at the previous row's ending column. Emit CRLF explicitly
+    // so every rendered row starts in column zero on every supported terminal.
+    format!(
+        "{prefix}{}",
+        [header, clipped, footer].concat().join("\r\n")
+    )
 }
 
 pub type ContentRenderer<'a> = dyn FnMut(View, usize, bool, Option<&str>) -> String + 'a;
@@ -1241,6 +1248,27 @@ mod tests {
             render_interactive_screen(&InteractiveState::default(), &body, 40, 12, false, false);
         assert!(twelve_lines.contains("Used  █"));
         assert!(twelve_lines.lines().count() <= 12);
+    }
+
+    #[test]
+    fn interactive_rows_use_crlf_for_raw_terminal_mode() {
+        let rendered = render_interactive_screen(
+            &InteractiveState::default(),
+            "first\nsecond",
+            80,
+            20,
+            false,
+            true,
+        );
+        assert!(rendered.contains("first\r\nsecond"));
+        assert!(
+            rendered
+                .as_bytes()
+                .iter()
+                .enumerate()
+                .all(|(index, byte)| *byte != b'\n'
+                    || index > 0 && rendered.as_bytes()[index - 1] == b'\r')
+        );
     }
 
     #[test]

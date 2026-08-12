@@ -13,7 +13,7 @@ It does not replace the official `codex` command, and it does not clear or modif
 Open a terminal and paste this one-line installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.0-beta.1/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.0-beta.2/install.sh | sh
 ```
 
 Then run:
@@ -29,7 +29,7 @@ The program is installed for the current user under `~/.local/bin`; `sudo` is no
 Open PowerShell and paste:
 
 ```powershell
-irm https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.0-beta.1/install.ps1 | iex
+irm https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.0-beta.2/install.ps1 | iex
 ```
 
 Open a new terminal after installation, then run:
@@ -53,7 +53,7 @@ codex-meter --version
 For this release, the result should be:
 
 ```text
-codex-meter 0.16.0-beta.1
+codex-meter 0.16.0-beta.2
 ```
 
 If the shell cannot find the command, close the terminal and open a new one. On Linux and macOS, you can also check:
