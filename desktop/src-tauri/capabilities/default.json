@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Minimal desktop capability for the main Codex Meter window",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}
