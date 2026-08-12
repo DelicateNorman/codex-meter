@@ -5,21 +5,57 @@ repository="DelicateNorman/codex-meter"
 version="${CODEX_METER_VERSION:-v0.16.0-beta.3}"
 bin_dir="${CODEX_METER_BIN_DIR:-$HOME/.local/bin}"
 rollback=0
+version_explicit=0
 
-case "${1:-}" in
-    "") ;;
-    --rollback) rollback=1 ;;
-    -h|--help)
-        echo "Usage: install.sh [--rollback]"
-        echo "  --rollback  swap codex-meter with the previous installed version"
-        exit 0
-        ;;
-    *)
-        echo "Unknown option: $1" >&2
-        echo "Usage: install.sh [--rollback]" >&2
-        exit 2
-        ;;
-esac
+usage() {
+    echo "Usage: install.sh [--version VERSION] [--rollback]"
+    echo "  --version VERSION  install a specific release tag"
+    echo "  --rollback         swap codex-meter with the previous installed version"
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --version)
+            if [ "$#" -lt 2 ] || [ -z "$2" ]; then
+                echo "--version requires a release tag." >&2
+                usage >&2
+                exit 2
+            fi
+            version="$2"
+            version_explicit=1
+            shift 2
+            ;;
+        --version=*)
+            version="${1#--version=}"
+            if [ -z "$version" ]; then
+                echo "--version requires a release tag." >&2
+                usage >&2
+                exit 2
+            fi
+            version_explicit=1
+            shift
+            ;;
+        --rollback)
+            rollback=1
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            usage >&2
+            exit 2
+            ;;
+    esac
+done
+
+if [ "$rollback" -eq 1 ] && [ "$version_explicit" -eq 1 ]; then
+    echo "--version cannot be combined with --rollback." >&2
+    usage >&2
+    exit 2
+fi
 
 destination="$bin_dir/codex-meter"
 previous="$destination.previous"

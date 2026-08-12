@@ -31,7 +31,10 @@ new_hash="$(shasum -a 256 "$asset_dir/$asset_name" | awk '{print $1}')"
 
 HOME="$os_home" CODEX_METER_HOME="$history_home" \
 CODEX_METER_BASE_URL="$asset_dir" CODEX_METER_BIN_DIR="$bin_dir" \
-    sh -s -- < "$repository_root/install.sh"
+    sh -s -- --version v-test-release < "$repository_root/install.sh" \
+    > "$test_root/install-output.txt"
+
+grep -q "Downloading codex-meter v-test-release" "$test_root/install-output.txt"
 
 test "$(shasum -a 256 "$bin_dir/codex-meter" | awk '{print $1}')" = "$new_hash"
 test "$(shasum -a 256 "$bin_dir/codex-meter.previous" | awk '{print $1}')" = "$old_hash"
