@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/DelicateNorman/codex-meter/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/DelicateNorman/codex-meter?style=flat-square&color=0a84ff"></a>
+  <a href="https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.0-beta.1"><img alt="Latest beta" src="https://img.shields.io/badge/release-v0.16.0--beta.1-0a84ff?style=flat-square"></a>
   <a href="https://github.com/DelicateNorman/codex-meter/actions/workflows/ci.yml"><img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/DelicateNorman/codex-meter/ci.yml?branch=main&style=flat-square&label=tests&color=38d996"></a>
   <img alt="Platforms" src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-38bdf8?style=flat-square">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-f7c948?style=flat-square"></a>
@@ -30,10 +30,9 @@
 
 Codex Meter turns the history already written by Codex—on this computer or configured SSH hosts—into an interactive terminal dashboard. It shows where your tokens went, which projects and models used them, how well caching worked, how long responses took, and how much of the active account's seven-day allowance remains.
 
-> **Rust rewrite branch:** `rust-rewrite` contains the v0.16 release candidate.
-> It keeps the Python v0.15 database/config format, while replacing the runtime
-> with one small native executable. The pinned v0.15 installer remains the
-> stable path until the cross-platform candidate checks are green.
+> **Rust beta:** v0.16.0-beta.1 replaces the Python runtime with one small native
+> executable while keeping the v0.15 database and configuration format. Existing
+> `~/.codex-meter` history is preserved during installation, upgrade, and rollback.
 
 It is a separate companion application. It does **not** replace or patch the official `codex` command.
 
@@ -57,7 +56,7 @@ The dashboard opens immediately. Live account limits load in the background and 
 | Performance | TTFT, end-to-end latency, output-token speed, tool timing, retries, and compactions when available |
 | Local ownership | One default database per operating-system user; optional manual account labels are off by default |
 | Privacy-first diagnostics | Rollout, OTLP, App Server, socket, packet-metadata, and proxy adapters that intentionally exclude content |
-| Small standalone builds | No Python required; about 8–10 MB depending on platform |
+| Small standalone builds | No Python required; about 5–6 MB depending on platform |
 
 ## Install
 
@@ -66,13 +65,13 @@ Standalone installers verify the release checksum, install only for the current 
 ### Linux and macOS
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.15.0/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.0-beta.1/install.sh | sh
 ```
 
 ### Windows PowerShell
 
 ```powershell
-irm https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.15.0/install.ps1 | iex
+irm https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.0-beta.1/install.ps1 | iex
 ```
 
 Open a new terminal and run:

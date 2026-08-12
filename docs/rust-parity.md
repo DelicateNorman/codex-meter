@@ -4,11 +4,12 @@ This document is the acceptance specification for rewriting Codex Meter 0.15.0 i
 
 ## Verification snapshot (2026-08-12)
 
-The `rust-rewrite` branch is feature-complete as a v0.16 alpha candidate. The
-checkboxes below remain the stricter stable-release gate; they are deliberately
-not mass-checked merely because the implementation compiles.
+The Rust implementation has merged into `main` and is prepared as the
+v0.16.0-beta.1 candidate. The checkboxes below remain the stricter stable-release
+gate; they are deliberately not mass-checked merely because the implementation
+compiles.
 
-| Area | Evidence recorded for the alpha candidate |
+| Area | Evidence recorded for the beta candidate |
 |---|---|
 | Command and data surface | All 28 Python top-level commands and their nested subcommands/options are present in the Rust parser. Empty-state command smoke tests pass on every supported target. |
 | Rust tests | 76 tests pass with both current stable Rust and the declared minimum Rust 1.85 toolchain. `cargo fmt --check` and strict Clippy (`-D warnings`) pass. |
@@ -22,13 +23,13 @@ not mass-checked merely because the implementation compiles.
 | Performance | The optimized Linux executable is about 5.7 MiB. The full first import measured 2.10 s / 46 MiB versus Python's 3.51 s / 73 MiB; unchanged startup was below 10 ms / 5 MiB versus about 90 ms / 22 MiB. |
 | Native CI | [GitHub Actions run 31606754311](https://github.com/DelicateNorman/codex-meter/actions/runs/31606754311) passed formatting, strict Clippy, all 76 Rust tests, release builds, and command smoke tests on Linux x86_64, macOS arm64, macOS x86_64, and Windows x86_64. Linux also passed the Python/Rust differential fixture. |
 
-Still reserved for the stable-release gate: installing through a public tagged
-v0.16 release URL instead of an Actions artifact; privileged live `tcpdump`
-capture (the parser and safe failure path are covered); and recorded manual
-Windows Terminal, macOS Terminal, and WSL interaction. The native automated
-terminal sessions are meaningful platform tests, but are not represented as a
-manual GUI-terminal recording. The alpha branch therefore does not replace
-`main` or create a release tag.
+The beta tag workflow repeats installation and rollback from its public GitHub
+Release URL after publication. Still reserved for the stable-release gate are
+privileged live `tcpdump` capture (the parser and safe failure path are covered)
+and recorded manual Windows Terminal, macOS Terminal, and WSL interaction. The
+native automated terminal sessions are meaningful platform tests, but are not
+represented as a manual GUI-terminal recording. The beta therefore does not yet
+claim stable-release status.
 
 ## Parity rules
 

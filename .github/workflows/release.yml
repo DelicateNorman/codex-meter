@@ -31,6 +31,18 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
+      - name: Verify release tag matches Cargo version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: python {0}
+        run: |
+          import os
+          import tomllib
+          from pathlib import Path
+
+          version = tomllib.loads(Path("Cargo.toml").read_text(encoding="utf-8"))["package"]["version"]
+          tag = os.environ["GITHUB_REF_NAME"]
+          if tag != f"v{version}":
+              raise SystemExit(f"release tag {tag} does not match Cargo version v{version}")
       - run: cargo build --release --locked
       - name: Stage executable
         shell: bash
@@ -119,4 +131,92 @@ jobs:
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag --title "Codex Meter $GITHUB_REF_NAME" --generate-notes
+        shell: bash
+        run: |
+          set -eu
+          release_flags=()
+          case "$GITHUB_REF_NAME" in
+            *-*) release_flags+=(--prerelease) ;;
+          esac
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag --title "Codex Meter $GITHUB_REF_NAME" --generate-notes "${release_flags[@]}"
+
+  public-install:
+    name: Public install · ${{ matrix.asset }}
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: publish
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            asset: codex-meter-linux-x86_64
+          - os: macos-15
+            asset: codex-meter-macos-arm64
+          - os: macos-15-intel
+            asset: codex-meter-macos-x86_64
+          - os: windows-2025
+            asset: codex-meter-windows-x86_64.exe
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Download stable v0.15 binary
+        shell: python {0}
+        run: |
+          import urllib.request
+          from pathlib import Path
+
+          target = Path("stable/${{ matrix.asset }}")
+          target.parent.mkdir(parents=True, exist_ok=True)
+          url = "https://github.com/DelicateNorman/codex-meter/releases/download/v0.15.0/${{ matrix.asset }}"
+          urllib.request.urlretrieve(url, target)
+          target.chmod(0o755)
+      - name: Public one-line install and rollback
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -eu
+          test_root="$(mktemp -d)"
+          bin_dir="$test_root/bin"
+          meter_home="$test_root/meter-home"
+          sessions="$test_root/sessions"
+          mkdir -p "$bin_dir"
+          cp "stable/${{ matrix.asset }}" "$bin_dir/codex-meter"
+          chmod 0755 "$bin_dir/codex-meter"
+          python tests/release_history_guard.py seed --binary "$bin_dir/codex-meter" --home "$meter_home" --sessions "$sessions"
+          python tests/release_history_guard.py manifest --home "$meter_home" --output "$test_root/history.json"
+          export CODEX_METER_BIN_DIR="$bin_dir"
+          export CODEX_METER_HOME="$meter_home"
+          curl -fsSL "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$GITHUB_REF_NAME/install.sh" | sh
+          "$bin_dir/codex-meter" --version | grep -F "${GITHUB_REF_NAME#v}"
+          python tests/release_history_guard.py manifest --home "$meter_home" --expect "$test_root/history.json"
+          curl -fsSL "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$GITHUB_REF_NAME/install.sh" | sh -s -- --rollback
+          "$bin_dir/codex-meter" --version | grep -F "0.15.0"
+          python tests/release_history_guard.py manifest --home "$meter_home" --expect "$test_root/history.json"
+      - name: Public one-line install and rollback
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $testRoot = Join-Path $env:RUNNER_TEMP ("codex-meter-public-" + [guid]::NewGuid().ToString("N"))
+          $binDir = Join-Path $testRoot "bin"
+          $meterHome = Join-Path $testRoot "meter-home"
+          $sessions = Join-Path $testRoot "sessions"
+          New-Item -ItemType Directory -Force -Path $binDir | Out-Null
+          $destination = Join-Path $binDir "codex-meter.exe"
+          Copy-Item "stable/${{ matrix.asset }}" $destination
+          python tests/release_history_guard.py seed --binary $destination --home $meterHome --sessions $sessions
+          python tests/release_history_guard.py manifest --home $meterHome --output (Join-Path $testRoot "history.json")
+          $env:CODEX_METER_BIN_DIR = $binDir
+          $env:CODEX_METER_HOME = $meterHome
+          $installerUrl = "https://raw.githubusercontent.com/$env:GITHUB_REPOSITORY/$env:GITHUB_REF_NAME/install.ps1"
+          $installer = [scriptblock]::Create((Invoke-WebRequest -UseBasicParsing $installerUrl).Content)
+          & $installer
+          $version = & $destination --version
+          if ($version -notlike "*$($env:GITHUB_REF_NAME.Substring(1))*") { throw "unexpected installed version: $version" }
+          python tests/release_history_guard.py manifest --home $meterHome --expect (Join-Path $testRoot "history.json")
+          & $installer -Rollback
+          $version = & $destination --version
+          if ($version -notlike "*0.15.0*") { throw "rollback did not restore v0.15.0: $version" }
+          python tests/release_history_guard.py manifest --home $meterHome --expect (Join-Path $testRoot "history.json")

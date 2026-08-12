@@ -2,7 +2,7 @@
 
 All notable changes to Codex Meter are documented here.
 
-## [0.16.0-alpha.1] - 2026-08-12
+## [0.16.0-beta.1] - 2026-08-12
 
 - Rewrite the application runtime in Rust while retaining the v0.15 command surface, SQLite schema, configuration, pricing, privacy rules, and reports.
 - Keep interactive first paint non-blocking while weekly limits and SSH sources update in background workers.
@@ -112,6 +112,7 @@ First public Linux release.
 - Versioned API-equivalent pricing with unknown prices shown as `N/A`.
 - One-line, no-sudo Linux installer.
 
+[0.16.0-beta.1]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.0-beta.1
 [0.15.0]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.15.0
 [0.14.2]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.14.2
 [0.14.1]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.14.1

@@ -1,6 +1,6 @@
 [package]
 name = "codex-meter"
-version = "0.16.0-alpha.1"
+version = "0.16.0-beta.1"
 edition = "2024"
 rust-version = "1.85"
 description = "Local-first usage and performance observability for Codex"
