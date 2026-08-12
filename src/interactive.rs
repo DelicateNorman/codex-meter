@@ -487,11 +487,11 @@ struct TerminalGuard;
 impl TerminalGuard {
     fn enter(stdout: &mut impl Write) -> io::Result<Self> {
         enable_raw_mode()?;
-        if let Err(error) = execute!(stdout, EnterAlternateScreen, Hide) {
-            let _ = disable_raw_mode();
-            return Err(error);
-        }
-        Ok(Self)
+        // Construct the guard before emitting either terminal command. If a
+        // writer fails midway, unwinding still performs the full cleanup.
+        let guard = Self;
+        execute!(stdout, EnterAlternateScreen, Hide)?;
+        Ok(guard)
     }
 }
 
@@ -1256,5 +1256,210 @@ mod tests {
         assert!(rendered.contains("╰────────────────────╯"));
         assert!(rendered.contains("Project"));
         assert!(rendered.lines().all(|line| display_width(line) <= 132));
+    }
+
+    #[test]
+    fn menu_order_default_scope_and_main_modal_rules_match_reference() {
+        assert_eq!(
+            MENU_ITEMS.iter().map(|item| item.label).collect::<Vec<_>>(),
+            [
+                "Today",
+                "Week",
+                "Month",
+                "All time",
+                "Daily history",
+                "Weekly history",
+                "Monthly history",
+                "Network",
+                "Project",
+                "Refresh",
+                "Help",
+                "Quit",
+            ]
+        );
+        let mut state = InteractiveState::default();
+        assert_eq!(state.active_view, View::Today);
+        assert!(state.project_filter.is_none());
+        assert_eq!(handle_key(&mut state, Key::Up), Action::None);
+        assert_eq!(state.selected, MENU_ITEMS.len() - 1);
+        assert_eq!(handle_key(&mut state, Key::Down), Action::None);
+        assert_eq!(state.selected, 0);
+
+        handle_key(&mut state, Key::Right);
+        handle_key(&mut state, Key::Enter);
+        assert_eq!(state.active_view, View::Week);
+        handle_key(&mut state, Key::Character('?'));
+        assert!(state.show_help);
+        state.selected = menu_index(MenuTarget::Help);
+        assert_eq!(handle_key(&mut state, Key::Escape), Action::None);
+        assert!(!state.show_help);
+        assert_eq!(state.selected, menu_index(MenuTarget::View(View::Week)));
+        handle_key(&mut state, Key::Character('?'));
+        assert_eq!(handle_key(&mut state, Key::Character('r')), Action::Refresh);
+        assert!(!state.show_help);
+    }
+
+    #[test]
+    fn every_slash_alias_routes_to_the_expected_view_or_action() {
+        for (command, expected) in [
+            ("today", View::Today),
+            ("day", View::Today),
+            ("week", View::Week),
+            ("month", View::Month),
+            ("all", View::All),
+            ("history day", View::HistoryDay),
+            ("daily", View::HistoryDay),
+            ("history week", View::HistoryWeek),
+            ("weekly", View::HistoryWeek),
+            ("history month", View::HistoryMonth),
+            ("monthly", View::HistoryMonth),
+            ("network", View::Network),
+        ] {
+            let mut state = InteractiveState::default();
+            assert_eq!(
+                parse_slash_command(&mut state, command),
+                Action::ViewChanged(expected),
+                "{command}"
+            );
+            assert_eq!(state.active_view, expected, "{command}");
+        }
+        for command in ["project", "projects"] {
+            let mut state = InteractiveState::default();
+            assert_eq!(
+                parse_slash_command(&mut state, command),
+                Action::ProjectPickerOpened
+            );
+        }
+        for command in ["refresh", "reload"] {
+            assert_eq!(
+                parse_slash_command(&mut InteractiveState::default(), command),
+                Action::Refresh
+            );
+        }
+        for command in ["help", "?"] {
+            let mut state = InteractiveState::default();
+            assert_eq!(parse_slash_command(&mut state, command), Action::None);
+            assert!(state.show_help);
+        }
+        for command in ["quit", "exit", "q"] {
+            assert_eq!(
+                parse_slash_command(&mut InteractiveState::default(), command),
+                Action::Quit
+            );
+        }
+        let mut unknown = InteractiveState::default();
+        assert_eq!(
+            parse_slash_command(&mut unknown, "does not exist"),
+            Action::None
+        );
+        assert!(unknown.message.contains("use /help"));
+    }
+
+    #[test]
+    fn slash_typing_limit_backspace_wrap_and_ctrl_c_are_modal() {
+        let mut state = InteractiveState::default();
+        handle_key(&mut state, Key::Character('/'));
+        for _ in 0..60 {
+            handle_key(&mut state, Key::Character('X'));
+        }
+        assert_eq!(state.command_text.chars().count(), 48);
+        handle_key(&mut state, Key::Backspace);
+        handle_key(&mut state, Key::Space);
+        assert_eq!(state.command_text.chars().count(), 48);
+
+        state.command_text.clear();
+        state.command_selected = 0;
+        handle_key(&mut state, Key::Up);
+        assert_eq!(state.command_selected, COMMAND_ITEMS.len() - 1);
+        handle_key(&mut state, Key::Down);
+        assert_eq!(state.command_selected, 0);
+        assert_eq!(handle_key(&mut state, Key::CtrlC), Action::Quit);
+        assert!(!state.running);
+    }
+
+    #[test]
+    fn project_picker_handles_spaces_no_matches_and_restores_selection() {
+        let mut state = InteractiveState {
+            project_options: vec!["recent".into(), "my project".into(), "older".into()],
+            project_filter: Some("older".into()),
+            ..InteractiveState::default()
+        };
+        parse_slash_command(&mut state, "project");
+        assert_eq!(state.project_selected, 3);
+        for key in [
+            Key::Character('m'),
+            Key::Character('y'),
+            Key::Space,
+            Key::Character('p'),
+        ] {
+            handle_key(&mut state, key);
+        }
+        assert_eq!(state.project_query, "my p");
+        assert!(project_picker_text(&state, 80, 8).contains("my project"));
+        for _ in 0..4 {
+            handle_key(&mut state, Key::Backspace);
+        }
+        assert!(state.project_query.is_empty());
+        assert_eq!(state.project_selected, 3);
+
+        for character in "missing".chars() {
+            handle_key(&mut state, Key::Character(character));
+        }
+        assert!(project_picker_text(&state, 80, 8).contains("no matches"));
+        assert_eq!(handle_key(&mut state, Key::Enter), Action::None);
+        assert!(state.project_picker);
+        assert_eq!(state.message, "No projects match the filter");
+        assert_eq!(handle_key(&mut state, Key::Space), Action::None);
+        assert!(state.project_query.ends_with(' '));
+    }
+
+    #[test]
+    fn project_and_command_pages_fit_twelve_line_terminals() {
+        let mut projects = InteractiveState::default();
+        sync_projects(
+            &mut projects,
+            (0..10).map(|index| format!("project-{index}")),
+        );
+        parse_slash_command(&mut projects, "project");
+        let project_screen = render_interactive_screen(&projects, "", 40, 12, false, false);
+        assert!(project_screen.lines().count() <= 12);
+        assert!(project_screen.contains("Projects 1-3/11"));
+        assert!(project_screen.contains("All projects"));
+        assert!(!project_screen.contains("project-2"));
+
+        let mut command = InteractiveState::default();
+        handle_key(&mut command, Key::Character('/'));
+        let command_screen = render_interactive_screen(&command, "hidden", 80, 12, false, false);
+        assert!(command_screen.lines().count() <= 12);
+        assert!(command_screen.contains("View today's usage"));
+        assert!(!command_screen.contains("hidden"));
+    }
+
+    #[test]
+    fn crossterm_key_mapping_covers_arrows_utf8_and_controls() {
+        assert_eq!(
+            decode_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE)),
+            Key::Up
+        );
+        assert_eq!(
+            decode_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+            Key::Enter
+        );
+        assert_eq!(
+            decode_key(KeyEvent::new(KeyCode::Char('中'), KeyModifiers::NONE)),
+            Key::Character('中')
+        );
+        assert_eq!(
+            decode_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)),
+            Key::CtrlC
+        );
+        assert_eq!(
+            decode_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE)),
+            Key::Backspace
+        );
+        assert_eq!(
+            decode_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)),
+            Key::Escape
+        );
     }
 }

@@ -1013,6 +1013,11 @@ impl Storage {
         occurred_at: Option<&str>,
         source: &str,
     ) -> Result<bool> {
+        // A compaction can be the first structural event observed for a live
+        // thread.  Match the Python adapter by creating the minimal owned
+        // session before recording it, so later project/owner attribution has
+        // an anchor even when no turn event arrived first.
+        self.ensure_live_session(thread_id, occurred_at, None, None, source)?;
         Ok(self.connection.execute(
             "INSERT OR IGNORE INTO compactions(event_fingerprint,thread_id,turn_id,occurred_at,data_source) VALUES (?1,?2,?3,?4,?5)",
             params![fingerprint, thread_id, turn_id, occurred_at, source],
@@ -2001,7 +2006,7 @@ fn apply_metric_point(transaction: &Transaction<'_>, point: &MetricPointRecord) 
     if let (Some(column), Some(turn_id)) = (turn_column, point.turn_id.as_deref()) {
         transaction.execute(
             &format!("UPDATE turns SET {column}=COALESCE({column},?1) WHERE codex_turn_id=?2"),
-            params![value.round() as i64, turn_id],
+            params![value.round_ties_even() as i64, turn_id],
         )?;
     }
     let call_column = match point.name.as_str() {
@@ -2034,7 +2039,7 @@ fn apply_metric_point(transaction: &Transaction<'_>, point: &MetricPointRecord) 
             if let Some(column) = token_column {
                 transaction.execute(
                     &format!("UPDATE turns SET {column}=MAX({column},?1) WHERE codex_turn_id=?2"),
-                    params![value.round() as i64, turn_id],
+                    params![value.round_ties_even() as i64, turn_id],
                 )?;
             }
         }
@@ -2486,6 +2491,86 @@ mod tests {
         assert_eq!(value["cached_input_tokens"], 7);
         assert_eq!(value["estimated"], 1);
         assert!(value.get("usage").is_none());
+    }
+
+    #[test]
+    fn compaction_first_creates_an_owned_live_session() {
+        let temp = tempdir().unwrap();
+        let storage =
+            Storage::with_identity(temp.path().join("meter.db"), Some(501), "tester", None)
+                .unwrap();
+        storage.migrate().unwrap();
+
+        assert!(
+            storage
+                .insert_compaction(
+                    "compact-first",
+                    "compact-thread",
+                    None,
+                    Some("2026-08-12T01:00:00Z"),
+                    "app_server",
+                )
+                .unwrap()
+        );
+        assert_eq!(storage.sessions(20).unwrap().len(), 1);
+        assert_eq!(
+            storage.sessions(20).unwrap()[0].codex_thread_id,
+            "compact-thread"
+        );
+        assert!(
+            !storage
+                .insert_compaction(
+                    "compact-first",
+                    "compact-thread",
+                    None,
+                    Some("2026-08-12T01:00:00Z"),
+                    "app_server",
+                )
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn metric_updates_use_python_half_even_rounding() {
+        let temp = tempdir().unwrap();
+        let storage =
+            Storage::with_identity(temp.path().join("meter.db"), Some(501), "tester", None)
+                .unwrap();
+        storage.migrate().unwrap();
+        storage
+            .upsert_live_turn("round-thread", "round-turn", LiveTurnUpdate::default())
+            .unwrap();
+        storage
+            .insert_metric_points(&[MetricPointRecord {
+                event_fingerprint: "round-metric".into(),
+                observed_at: Some("2026-08-12T01:00:00Z".into()),
+                name: "codex.turn.ttft.duration_ms".into(),
+                kind: "gauge".into(),
+                value: Some(2.5),
+                point_sum: None,
+                point_count: None,
+                point_min: None,
+                point_max: None,
+                explicit_bounds: Vec::new(),
+                bucket_counts: Vec::new(),
+                attributes: HashMap::new(),
+                thread_id: Some("round-thread".into()),
+                turn_id: Some("round-turn".into()),
+                response_id: None,
+                tool_name: None,
+                start_time_unix_nano: None,
+                time_unix_nano: None,
+                quality: Quality::exact("otlp_http"),
+            }])
+            .unwrap();
+        assert_eq!(
+            storage
+                .turn_waterfall("round-turn")
+                .unwrap()
+                .unwrap()
+                .ttft_ms,
+            Some(2)
+        );
     }
 
     #[test]

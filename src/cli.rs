@@ -371,7 +371,10 @@ fn dispatch(args: Args) -> Result<()> {
         command,
     } = args;
     if matches!(command, Some(Command::Demo)) {
-        println!("{}", demo(!no_color && io::stdout().is_terminal()));
+        println!(
+            "{}",
+            demo(!no_color && std::env::var_os("NO_COLOR").is_none() && io::stdout().is_terminal())
+        );
         return Ok(());
     }
 
@@ -652,7 +655,8 @@ fn account_command(
             }
         }
         AccountCommand::ClaimUnassigned { label } => {
-            let count = storage.claim_unassigned_account(&label)?;
+            let label = validated_account_label(&label)?;
+            let count = storage.claim_unassigned_account(label)?;
             println!(
                 "Assigned {count} existing session(s) for OS user {} to account {label:?}.",
                 storage.owner_username
@@ -699,7 +703,7 @@ fn remote_command(
             }
         }
         RemoteCommand::Add { host } => {
-            let host = config::validate_remote_host(&host)?;
+            let host = validated_remote_host(&host)?;
             let files = crate::remote::list(&host)?;
             let mut hosts = config::remote_hosts(home);
             if !hosts.contains(&host) {
@@ -714,7 +718,7 @@ fn remote_command(
             sync_remotes(storage, catalog, &[host], false, false)?;
         }
         RemoteCommand::Remove { host } => {
-            let host = config::validate_remote_host(&host)?;
+            let host = validated_remote_host(&host)?;
             let mut hosts = config::remote_hosts(home);
             let original = hosts.len();
             hosts.retain(|item| item != &host);
@@ -730,13 +734,13 @@ fn remote_command(
         }
         RemoteCommand::Sync { host, force } => {
             let hosts = match host {
-                Some(host) => vec![config::validate_remote_host(&host)?],
+                Some(host) => vec![validated_remote_host(&host)?],
                 None => config::remote_hosts(home),
             };
             sync_remotes(storage, catalog, &hosts, force, false)?;
         }
         RemoteCommand::Test { host } => {
-            let host = config::validate_remote_host(&host)?;
+            let host = validated_remote_host(&host)?;
             let files = crate::remote::list(&host)?;
             println!(
                 "{host}: SSH access OK; {} Rollout file(s) found.",
@@ -745,6 +749,19 @@ fn remote_command(
         }
     }
     Ok(())
+}
+
+fn validated_remote_host(value: &str) -> Result<String> {
+    config::validate_remote_host(value).map_err(|error| exit_error(2, error.to_string()))
+}
+
+fn validated_account_label(value: &str) -> Result<&str> {
+    let value = value.trim();
+    if value.is_empty() {
+        Err(exit_error(2, "account label cannot be empty"))
+    } else {
+        Ok(value)
+    }
 }
 
 fn period_bounds(
@@ -1854,11 +1871,17 @@ fn interactive(
             true,
         )
         .map_err(|error| format!("{error:#}"))?;
-        *refresh_quota_message.borrow_mut() = Some("Loading account weekly limits…".into());
-        *refresh_quota_receiver.borrow_mut() = Some(crate::quota::spawn_weekly_quota_reader(
-            Duration::from_secs(4),
-        ));
-        if !refresh_remotes.is_empty() {
+        // Do not stack account/app-server or SSH processes when a user presses
+        // r repeatedly while the previous background refresh is still live.
+        let quota_idle = refresh_quota_receiver.borrow().is_none();
+        if quota_idle {
+            *refresh_quota_message.borrow_mut() = Some("Loading account weekly limits…".into());
+            *refresh_quota_receiver.borrow_mut() = Some(crate::quota::spawn_weekly_quota_reader(
+                Duration::from_secs(4),
+            ));
+        }
+        let remotes_idle = refresh_remote_receiver.borrow().is_none();
+        if !refresh_remotes.is_empty() && remotes_idle {
             *refresh_remote_message.borrow_mut() = Some(format!(
                 "Syncing {} remote source(s) in the background…",
                 refresh_remotes.len()
@@ -2057,26 +2080,34 @@ fn spawn_remote_worker(
 ) -> std::sync::mpsc::Receiver<String> {
     let (sender, receiver) = std::sync::mpsc::channel();
     thread::spawn(move || {
-        let result = (|| -> Result<(usize, usize)> {
+        let result = (|| -> Result<(usize, Vec<String>)> {
             let mut storage = open_storage(&path, &identity, &catalog)?;
             let mut imported = 0;
-            let mut failures = 0;
+            let mut failures = Vec::new();
             for host in &hosts {
                 match crate::remote::sync(&mut storage, &catalog, host, false) {
                     Ok(row) => {
                         imported += row.imported_files;
-                        failures += row.failed_files;
+                        if row.failed_files > 0 {
+                            failures.push(format!(
+                                "{host}: {} remote Rollout file(s) failed",
+                                row.failed_files
+                            ));
+                        }
                     }
-                    Err(_) => failures += 1,
+                    Err(error) => failures.push(format!("{host}: {error:#}")),
                 }
             }
             Ok((imported, failures))
         })();
         let message = match result {
-            Ok((imported, 0)) => format!("Remote sync complete · {imported} changed file(s)"),
+            Ok((imported, failures)) if failures.is_empty() => {
+                format!("Remote sync complete · {imported} changed file(s)")
+            }
             Ok((imported, failures)) => {
                 format!(
-                    "Remote sync partial · {imported} imported · {failures} failed · press r to retry"
+                    "Remote sync partial · {imported} imported · {} · press r to retry",
+                    failures.join(" · ")
                 )
             }
             Err(error) => format!("Remote sync failed: {error:#} · press r to retry"),
@@ -2216,5 +2247,16 @@ mod tests {
         ] {
             assert!(names.contains(&expected), "missing {expected}");
         }
+    }
+
+    #[test]
+    fn invalid_remote_alias_and_empty_account_label_are_usage_errors() {
+        for error in [
+            validated_remote_host("bad@host").unwrap_err(),
+            validated_account_label("   ").unwrap_err(),
+        ] {
+            assert_eq!(error_exit_code(&error), 2);
+        }
+        assert_eq!(validated_account_label("  work  ").unwrap(), "work");
     }
 }

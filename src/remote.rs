@@ -6,9 +6,13 @@ use crate::pricing::PricingCatalog;
 use crate::storage::{SourceMetadata, Storage};
 use anyhow::{Context, Result, bail};
 use std::collections::HashMap;
-use std::io::BufReader;
+use std::io::{BufReader, Read, Seek};
 use std::path::{Component, Path};
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitStatus, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
+
+const LIST_TIMEOUT: Duration = Duration::from_secs(20);
 
 const LIST_SCRIPT: &str = r#"set -eu
 root="$HOME/.codex/sessions"
@@ -60,22 +64,28 @@ pub fn list(host: &str) -> Result<Vec<RemoteFile>> {
 }
 
 fn list_with_ssh(host: &str, ssh: &str) -> Result<Vec<RemoteFile>> {
+    list_with_ssh_timeout(host, ssh, LIST_TIMEOUT)
+}
+
+fn list_with_ssh_timeout(host: &str, ssh: &str, timeout: Duration) -> Result<Vec<RemoteFile>> {
     let host = validate_remote_host(host)?;
     let command = format!("sh -c {}", shell_quote(LIST_SCRIPT));
-    let output = Command::new(ssh)
-        .args(ssh_options())
-        .arg(&host)
-        .arg(command)
-        .output()
-        .with_context(|| "OpenSSH client was not found; install `ssh` first")?;
-    if !output.status.success() {
+    let mut ssh_command = Command::new(ssh);
+    ssh_command.args(ssh_options()).arg(&host).arg(command);
+    let (status, stdout_bytes, stderr_bytes) = command_output_with_timeout(
+        &mut ssh_command,
+        timeout,
+        &format!("SSH connection to {host} timed out"),
+        "OpenSSH client was not found; install `ssh` first",
+    )?;
+    if !status.success() {
         bail!(
             "{host}: {}",
-            short_error(&String::from_utf8_lossy(&output.stderr))
+            short_error(&String::from_utf8_lossy(&stderr_bytes))
         );
     }
     let mut files = Vec::new();
-    for line in String::from_utf8_lossy(&output.stdout).lines() {
+    for line in String::from_utf8_lossy(&stdout_bytes).lines() {
         let mut fields = line.splitn(3, '\t');
         let (Some(size), Some(mtime), Some(relative)) =
             (fields.next(), fields.next(), fields.next())
@@ -98,6 +108,52 @@ fn list_with_ssh(host: &str, ssh: &str) -> Result<Vec<RemoteFile>> {
     }
     files.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
     Ok(files)
+}
+
+fn command_output_with_timeout(
+    command: &mut Command,
+    timeout: Duration,
+    timeout_message: &str,
+    not_found_message: &str,
+) -> Result<(ExitStatus, Vec<u8>, Vec<u8>)> {
+    // Seekable anonymous files cannot fill and block the SSH child. They also
+    // avoid leaving pipe-reader threads behind when a timed-out process has
+    // descendants that inherited stdout/stderr.
+    let mut stdout = tempfile::tempfile().context("could not buffer SSH stdout")?;
+    let mut stderr = tempfile::tempfile().context("could not buffer SSH stderr")?;
+    let mut child = command
+        .stdout(Stdio::from(stdout.try_clone()?))
+        .stderr(Stdio::from(stderr.try_clone()?))
+        .spawn()
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                anyhow::anyhow!(not_found_message.to_owned())
+            } else {
+                anyhow::Error::new(error).context("could not start SSH client")
+            }
+        })?;
+    let deadline = Instant::now() + timeout.max(Duration::from_millis(100));
+    let timed_out = loop {
+        if child.try_wait()?.is_some() {
+            break false;
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            break true;
+        }
+        thread::sleep(Duration::from_millis(20));
+    };
+    let status = child.wait()?;
+    if timed_out {
+        bail!(timeout_message.to_owned());
+    }
+    stdout.rewind()?;
+    stderr.rewind()?;
+    let mut stdout_bytes = Vec::new();
+    let mut stderr_bytes = Vec::new();
+    stdout.read_to_end(&mut stdout_bytes)?;
+    stderr.read_to_end(&mut stderr_bytes)?;
+    Ok((status, stdout_bytes, stderr_bytes))
 }
 
 pub fn sync(
@@ -284,5 +340,38 @@ mod tests {
     #[test]
     fn shell_quotes_single_quotes() {
         assert_eq!(shell_quote("a'b"), "'a'\"'\"'b'");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn list_timeout_drains_pipes_and_reports_the_host() {
+        let mut command = Command::new("sh");
+        command.args([
+            "-c",
+            "printf 'login banner\\n'; printf 'diagnostic\\n' >&2; exec sleep 5",
+        ]);
+        let error = command_output_with_timeout(
+            &mut command,
+            Duration::from_millis(100),
+            "SSH connection to example-host timed out",
+            "OpenSSH client was not found; install `ssh` first",
+        )
+        .unwrap_err()
+        .to_string();
+        assert_eq!(error, "SSH connection to example-host timed out");
+    }
+
+    #[test]
+    fn only_not_found_is_reported_as_missing_ssh() {
+        let mut command = Command::new("/definitely/not/a/codex-meter-command");
+        let error = command_output_with_timeout(
+            &mut command,
+            Duration::from_secs(1),
+            "timeout",
+            "OpenSSH client was not found; install `ssh` first",
+        )
+        .unwrap_err()
+        .to_string();
+        assert_eq!(error, "OpenSSH client was not found; install `ssh` first");
     }
 }

@@ -2,6 +2,31 @@
 
 This document is the acceptance specification for rewriting Codex Meter 0.15.0 in Rust. The Python implementation at tag `v0.15.0` is authoritative unless a later product decision explicitly changes behavior. Every item begins as `TODO`; an item may be marked complete only after its stated Rust verification passes.
 
+## Verification snapshot (2026-08-12)
+
+The `rust-rewrite` branch is feature-complete as a v0.16 alpha candidate. The
+checkboxes below remain the stricter stable-release gate; they are deliberately
+not mass-checked merely because the implementation compiles.
+
+| Area | Evidence recorded for the alpha candidate |
+|---|---|
+| Command and data surface | All 28 Python top-level commands and their nested subcommands/options are present in the Rust parser. Empty-state command smoke tests pass on every supported target. |
+| Rust tests | 76 tests pass with both current stable Rust and the declared minimum Rust 1.85 toolchain. `cargo fmt --check` and strict Clippy (`-D warnings`) pass. |
+| Python regression | All 71 Python tests pass while the Rust candidate is present, including the automated Python/Rust database and JSON/CSV export differential fixture. |
+| Full-history differential | A 0.63 GiB local history (60 Rollouts) produced exactly 1,712 turns, 20,643 LLM calls, 1,926 tools, 12 model groups, 50 sessions, 13 project groups, and matching exports in both implementations. |
+| Existing-home compatibility | A backup of the populated v0.15 home opened without migration loss; all read/report/export commands passed, table counts were unchanged, and SQLite integrity remained `ok`. |
+| Protocols and privacy | Real loopback OTLP logs/metrics/traces, App Server ingest/stdio proxy, HTTP and TLS reverse proxy, CONNECT, and TLS probe paths passed. Canary prompts, responses, headers, credentials, tool bodies, and proxy bodies were absent from SQLite, WAL, and persisted files. |
+| Interactive behavior | A real Linux PTY verified non-blocking first paint, quota/remote redraw, refresh, slash/project modal semantics, recent-project ordering, Unicode input, short layouts, and terminal restoration. |
+| Performance | The optimized Linux executable is about 5.7 MiB. The full first import measured 2.10 s / 46 MiB versus Python's 3.51 s / 73 MiB; unchanged startup was below 10 ms / 5 MiB versus about 90 ms / 22 MiB. |
+| Native CI | [GitHub Actions run 31593586758](https://github.com/DelicateNorman/codex-meter/actions/runs/31593586758) passed formatting, Clippy, the then-current 61-test suite, release build, and command smoke on Linux x86_64, macOS arm64, macOS x86_64, and Windows x86_64. Linux also ran the cross-implementation differential test. The 76-test final audit suite is covered by the subsequent branch CI run. |
+
+Still reserved for the stable-release gate: installer/checksum conversion and a
+tagged artifact dry run; a real external SSH alias (none is configured on the
+verification host); privileged live `tcpdump` capture (the parser and safe
+failure path are covered); and recorded manual Windows-console/WSL interaction.
+The alpha branch therefore does not replace `main`, alter the stable installer,
+or create a release tag.
+
 ## Parity rules
 
 - [ ] **TODO — P-001: No feature deletion.** The Rust binary must preserve every command, option, interactive view, collector, query, privacy guarantee, and supported platform listed below. Authority: `codex_meter/cli.py:build_parser`, `README.md`, and `CHANGELOG.md`. Rust verification: compare `codex-meter --help` and every nested `--help` against a v0.15.0 Python reference; run the complete checklist on release binaries.

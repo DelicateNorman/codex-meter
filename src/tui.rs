@@ -652,13 +652,16 @@ fn percentile(values: &[f64], fraction: f64) -> Option<f64> {
     }
     let mut values = values.to_vec();
     values.sort_by(f64::total_cmp);
-    let index = ((values.len() - 1) as f64 * fraction).round() as usize;
+    // Python round uses ties-to-even; preserve the reference renderer's
+    // nearest-rank choice for two/even-sized samples.
+    let index = ((values.len() - 1) as f64 * fraction).round_ties_even() as usize;
     values.get(index).copied()
 }
 
 fn weekly_quota_lines(quota: &WeeklyQuota, bar_width: usize) -> [String; 2] {
     let used = if quota.used_percent > 0 {
-        ((bar_width as f64 * f64::from(quota.used_percent) / 100.0).round() as usize).max(1)
+        ((bar_width as f64 * f64::from(quota.used_percent) / 100.0).round_ties_even() as usize)
+            .max(1)
     } else {
         0
     }
@@ -688,7 +691,7 @@ fn bar_line(label: &str, value: i64, maximum: i64, width: usize, meaning: &str) 
     } else {
         (value as f64 / maximum as f64).clamp(0.0, 1.0)
     };
-    let filled = (width as f64 * ratio).round() as usize;
+    let filled = (width as f64 * ratio).round_ties_even() as usize;
     format!(
         "{label:<14} {}{}  {:>9}  {meaning}",
         "█".repeat(filled),
@@ -901,5 +904,113 @@ mod tests {
         assert!(rendered.contains("First token"));
         assert!(rendered.contains("50.0*"));
         assert!(rendered.contains("no probe/capture samples"));
+    }
+
+    #[test]
+    fn python_ties_to_even_rounding_is_preserved() {
+        assert_eq!(percentile(&[10.0, 20.0], 0.5), Some(10.0));
+        let quota = WeeklyQuota {
+            limit_id: "codex".into(),
+            name: "Codex".into(),
+            used_percent: 15,
+            resets_at: None,
+            window_minutes: WEEK_MINUTES,
+            plan_type: None,
+        };
+        assert_eq!(weekly_quota_lines(&quota, 30)[1].matches('█').count(), 4);
+        assert_eq!(
+            bar_line("Cached input", 25, 100, 10, "25.0% of input")
+                .matches('█')
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn history_and_failed_network_flow_keep_unknown_values_explicit() {
+        let history = render_history(
+            &[HistoryRow {
+                period_start: "2026-08-12".into(),
+                sessions: 2,
+                turns: 4,
+                calls: 5,
+                input_tokens: 100,
+                cached_input_tokens: 50,
+                total_tokens: 120,
+                cost_usd: None,
+            }],
+            "day",
+            "tester",
+            Some("demo"),
+            false,
+        );
+        assert!(history.contains("tester"));
+        assert!(history.contains("project demo"));
+        assert!(history.contains("50.0%"));
+        assert!(history.contains("N/A"));
+
+        let network = render_network(
+            &[],
+            &[FlowRow {
+                destination_host: Some("api.openai.com".into()),
+                success: Some(false),
+                error_type: Some("timeout".into()),
+                ..FlowRow::default()
+            }],
+            &NetworkOptions {
+                period: "DAY",
+                username: "tester",
+                project: Some("demo"),
+                color: false,
+                width: 100,
+            },
+        );
+        assert!(network.contains("FAILED (timeout)"));
+        assert!(network.contains("api.openai.com"));
+        assert!(network.contains("AVG N/A"));
+        assert!(network.contains("project demo"));
+    }
+
+    #[test]
+    fn color_mode_uses_palette_and_plain_mode_has_no_escapes() {
+        let plain = render_overview(
+            &Overview::default(),
+            &[],
+            &OverviewOptions::new("TODAY", 80, false),
+        );
+        let colored = render_overview(
+            &Overview::default(),
+            &[],
+            &OverviewOptions::new("TODAY", 80, true),
+        );
+        assert!(!plain.contains(''));
+        for expected in [BG, PANEL, BLUE, CYAN, LIGHT, MUTED, YELLOW, RESET] {
+            assert!(
+                colored.contains(expected),
+                "missing palette entry {expected:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn overview_warns_for_unpriced_calls_and_limits_model_rows_to_eight() {
+        let overview = Overview {
+            unpriced_calls: 3,
+            ..Overview::default()
+        };
+        let models = (0..10)
+            .map(|index| ModelRow {
+                model: format!("model-{index}"),
+                ..ModelRow::default()
+            })
+            .collect::<Vec<_>>();
+        let rendered = render_overview(
+            &overview,
+            &models,
+            &OverviewOptions::new("TODAY", 100, false),
+        );
+        assert!(rendered.contains("3 call(s) have unknown pricing"));
+        assert!(rendered.contains("model-7"));
+        assert!(!rendered.contains("model-8"));
     }
 }
