@@ -1,6 +1,8 @@
 name: Build Rust release candidate
 
 on:
+  push:
+    branches: [rust-rewrite]
   workflow_dispatch:
 
 permissions:
@@ -26,6 +28,9 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
       - run: cargo build --release --locked
       - name: Stage executable
         shell: bash
@@ -37,9 +42,67 @@ jobs:
           cp "$source" "dist/${{ matrix.asset }}"
           "dist/${{ matrix.asset }}" --version
           "dist/${{ matrix.asset }}" --no-color demo >/dev/null
+      - name: Create platform checksum
+        shell: python {0}
+        run: |
+          import hashlib
+          from pathlib import Path
+
+          asset = Path("dist/${{ matrix.asset }}")
+          digest = hashlib.sha256(asset.read_bytes()).hexdigest()
+          Path("dist/SHA256SUMS").write_text(f"{digest}  {asset.name}\n", encoding="ascii")
+      - name: Download stable v0.15 binary for upgrade test
+        shell: python {0}
+        run: |
+          import urllib.request
+          from pathlib import Path
+
+          target = Path("stable/${{ matrix.asset }}")
+          target.parent.mkdir(parents=True, exist_ok=True)
+          url = "https://github.com/DelicateNorman/codex-meter/releases/download/v0.15.0/${{ matrix.asset }}"
+          urllib.request.urlretrieve(url, target)
+          target.chmod(0o755)
+      - name: Unix install, upgrade, checksum, rollback, and history acceptance
+        if: runner.os != 'Windows'
+        shell: bash
+        run: sh tests/install_unix_acceptance.sh "$PWD/dist" "${{ matrix.asset }}" "$PWD/stable/${{ matrix.asset }}"
+      - name: Windows install, upgrade, checksum, rollback, and history acceptance
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\tests\install_windows_acceptance.ps1 -AssetDir (Resolve-Path dist).Path -AssetName "${{ matrix.asset }}" -OldBinary (Resolve-Path "stable/${{ matrix.asset }}").Path
+      - name: Install Windows ConPTY driver
+        if: runner.os == 'Windows'
+        run: python -m pip install pywinpty==3.0.5
+      - name: Native terminal interaction
+        run: python tests/interactive_pty_smoke.py "dist/${{ matrix.asset }}"
       - uses: actions/upload-artifact@v7
         with:
           name: rust-${{ matrix.asset }}
           path: dist/${{ matrix.asset }}
           if-no-files-found: error
 
+  bundle:
+    name: Assemble checksummed release candidate
+    needs: binaries
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: rust-*
+          path: dist
+          merge-multiple: true
+      - name: Verify manifest and create checksums
+        run: |
+          set -eu
+          test -f dist/codex-meter-linux-x86_64
+          test -f dist/codex-meter-macos-arm64
+          test -f dist/codex-meter-macos-x86_64
+          test -f dist/codex-meter-windows-x86_64.exe
+          cd dist
+          sha256sum codex-meter-linux-x86_64 codex-meter-macos-arm64 codex-meter-macos-x86_64 codex-meter-windows-x86_64.exe > SHA256SUMS
+          sha256sum --check SHA256SUMS
+      - uses: actions/upload-artifact@v7
+        with:
+          name: rust-release-candidate
+          path: dist/*
+          if-no-files-found: error

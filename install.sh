@@ -4,6 +4,55 @@ set -eu
 repository="DelicateNorman/codex-meter"
 version="${CODEX_METER_VERSION:-v0.15.0}"
 bin_dir="${CODEX_METER_BIN_DIR:-$HOME/.local/bin}"
+rollback=0
+
+case "${1:-}" in
+    "") ;;
+    --rollback) rollback=1 ;;
+    -h|--help)
+        echo "Usage: install.sh [--rollback]"
+        echo "  --rollback  swap codex-meter with the previous installed version"
+        exit 0
+        ;;
+    *)
+        echo "Unknown option: $1" >&2
+        echo "Usage: install.sh [--rollback]" >&2
+        exit 2
+        ;;
+esac
+
+destination="$bin_dir/codex-meter"
+previous="$destination.previous"
+
+if [ "$rollback" -eq 1 ]; then
+    if [ ! -f "$previous" ]; then
+        echo "No previous codex-meter installation is available to restore." >&2
+        exit 1
+    fi
+    mkdir -p "$bin_dir"
+    swap="$bin_dir/.codex-meter.rollback.$$"
+    if [ -f "$destination" ]; then
+        mv "$destination" "$swap"
+    fi
+    if ! mv "$previous" "$destination"; then
+        if [ -f "$swap" ]; then mv "$swap" "$destination"; fi
+        echo "Could not restore the previous codex-meter installation." >&2
+        exit 1
+    fi
+    chmod 0755 "$destination"
+    if ! "$destination" --version; then
+        mv "$destination" "$previous"
+        if [ -f "$swap" ]; then mv "$swap" "$destination"; fi
+        echo "The previous codex-meter installation failed its self-check; rollback was cancelled." >&2
+        exit 1
+    fi
+    if [ -f "$swap" ]; then
+        mv "$swap" "$previous"
+    fi
+    echo "Restored the previous installation at $destination"
+    echo "Existing usage data under ~/.codex-meter was not changed."
+    exit 0
+fi
 
 case "$(uname -s)" in
     Linux) platform="linux" ;;
@@ -64,10 +113,42 @@ fi
 
 mkdir -p "$bin_dir"
 chmod 0755 "$temporary_dir/$asset"
-mv "$temporary_dir/$asset" "$bin_dir/codex-meter"
+if ! "$temporary_dir/$asset" --version >/dev/null; then
+    echo "The downloaded codex-meter binary failed its self-check." >&2
+    exit 1
+fi
 
-"$bin_dir/codex-meter" --version
-echo "Installed to $bin_dir/codex-meter"
+staged="$(mktemp "$bin_dir/.codex-meter.new.XXXXXX")"
+cp "$temporary_dir/$asset" "$staged"
+chmod 0755 "$staged"
+had_previous=0
+if [ -f "$destination" ]; then
+    mv "$destination" "$previous"
+    had_previous=1
+fi
+if ! mv "$staged" "$destination"; then
+    if [ "$had_previous" -eq 1 ] && [ -f "$previous" ]; then
+        mv "$previous" "$destination"
+    fi
+    echo "Could not install codex-meter." >&2
+    exit 1
+fi
+
+if ! "$destination" --version; then
+    if [ "$had_previous" -eq 1 ] && [ -f "$previous" ]; then
+        mv "$previous" "$destination"
+    else
+        rm -f "$destination"
+    fi
+    echo "The new codex-meter failed its self-check; the previous installation was restored." >&2
+    exit 1
+fi
+
+echo "Installed to $destination"
+if [ "$had_previous" -eq 1 ]; then
+    echo "Previous version saved at $previous"
+    echo "Rollback command: sh install.sh --rollback"
+fi
 case ":$PATH:" in
     *":$bin_dir:"*) ;;
     *) echo "Add $bin_dir to PATH, then run: codex-meter" ;;
