@@ -1,0 +1,146 @@
+diff --git a/codex-rs/tui/src/bottom_pane/command_popup.rs b/codex-rs/tui/src/bottom_pane/command_popup.rs
+index f613e5e..4ba58aa 100644
+--- a/codex-rs/tui/src/bottom_pane/command_popup.rs
++++ b/codex-rs/tui/src/bottom_pane/command_popup.rs
+@@ -386,11 +386,30 @@ mod tests {
+                 "model".to_string(),
+                 "memories".to_string(),
+                 "mention".to_string(),
++                "meter".to_string(),
+                 "mcp".to_string()
+             ]
+         );
+     }
+
++    #[test]
++    fn meter_command_popup_snapshot() {
++        let mut popup = CommandPopup::new(CommandPopupFlags::default(), Vec::new());
++        popup.on_composer_text_change("/meter".to_string());
++
++        let width = 80;
++        let area = Rect::new(
++            /*x*/ 0,
++            /*y*/ 0,
++            width,
++            popup.calculate_required_height(width),
++        );
++        let mut buf = Buffer::empty(area);
++        popup.render_ref(area, &mut buf);
++
++        insta::assert_snapshot!("command_popup_meter", format!("{buf:?}"));
++    }
++
+     #[cfg(any(target_os = "macos", target_os = "windows"))]
+     #[test]
+     fn app_command_popup_snapshot() {
+diff --git a/codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__command_popup__tests__command_popup_meter.snap b/codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__command_popup__tests__command_popup_meter.snap
+new file mode 100644
+index 0000000..7eed8f9
+--- /dev/null
++++ b/codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__command_popup__tests__command_popup_meter.snap
+@@ -0,0 +1,15 @@
++---
++source: tui/src/bottom_pane/command_popup.rs
++expression: "format!(\"{buf:?}\")"
++---
++Buffer {
++    area: Rect { x: 0, y: 0, width: 80, height: 1 },
++    content: [
++        "  /meter  show local Codex Meter usage, cache, cost, and latency                ",
++    ],
++    styles: [
++        x: 0, y: 0, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
++        x: 2, y: 0, fg: Cyan, bg: Reset, underline: Reset, modifier: BOLD,
++        x: 64, y: 0, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
++    ]
++}
+diff --git a/codex-rs/tui/src/chatwidget/slash_dispatch.rs b/codex-rs/tui/src/chatwidget/slash_dispatch.rs
+index e28cfd7..d59f2b4 100644
+--- a/codex-rs/tui/src/chatwidget/slash_dispatch.rs
++++ b/codex-rs/tui/src/chatwidget/slash_dispatch.rs
+@@ -452,6 +452,9 @@ impl ChatWidget {
+                     self.open_usage_menu();
+                 }
+             }
++            SlashCommand::Meter => {
++                self.add_meter_output();
++            }
+             SlashCommand::Ide => {
+                 self.handle_ide_command();
+             }
+@@ -1058,6 +1061,7 @@ impl ChatWidget {
+             SlashCommand::Ide
+             | SlashCommand::Status
+             | SlashCommand::Usage
++            | SlashCommand::Meter
+             | SlashCommand::DebugConfig
+             | SlashCommand::Ps
+             | SlashCommand::Stop
+@@ -1113,6 +1117,31 @@ impl ChatWidget {
+         }
+     }
+
++    fn add_meter_output(&mut self) {
++        let program = std::env::var_os("CODEX_METER_BIN")
++            .unwrap_or_else(|| std::ffi::OsString::from("codex-meter"));
++        match std::process::Command::new(program)
++            .args(["--no-color", "today", "--refresh"])
++            .output()
++        {
++            Ok(output) if output.status.success() => {
++                let text = String::from_utf8_lossy(&output.stdout);
++                let lines = text
++                    .lines()
++                    .map(|line| Line::from(line.to_owned()))
++                    .collect();
++                self.add_plain_history_lines(lines);
++            }
++            Ok(output) => {
++                let detail = String::from_utf8_lossy(&output.stderr);
++                self.add_error_message(format!("Codex Meter failed: {}", detail.trim()));
++            }
++            Err(err) => self.add_error_message(format!(
++                "Could not run codex-meter: {err}. Install Codex Meter or set CODEX_METER_BIN."
++            )),
++        }
++    }
++
+     fn slash_command_args_elements(
+         rest: &str,
+         rest_offset: usize,
+diff --git a/codex-rs/tui/src/slash_command.rs b/codex-rs/tui/src/slash_command.rs
+index abd1386..aa19712 100644
+--- a/codex-rs/tui/src/slash_command.rs
++++ b/codex-rs/tui/src/slash_command.rs
+@@ -49,6 +49,7 @@ pub enum SlashCommand {
+     Mention,
+     Status,
+     Usage,
++    Meter,
+     DebugConfig,
+     Title,
+     Statusline,
+@@ -104,6 +105,7 @@ impl SlashCommand {
+             SlashCommand::Hooks => "view and manage lifecycle hooks",
+             SlashCommand::Status => "show current session configuration and token usage",
+             SlashCommand::Usage => "view account usage or use a usage limit reset",
++            SlashCommand::Meter => "show local Codex Meter usage, cache, cost, and latency",
+             SlashCommand::DebugConfig => "show config layers and requirement sources for debugging",
+             SlashCommand::Title => "configure which items appear in the terminal title",
+             SlashCommand::Statusline => "configure which items appear in the status line",
+@@ -164,6 +166,7 @@ impl SlashCommand {
+                 | SlashCommand::Mcp
+                 | SlashCommand::Raw
+                 | SlashCommand::Usage
++                | SlashCommand::Meter
+                 | SlashCommand::Pets
+                 | SlashCommand::Side
+                 | SlashCommand::Btw
+@@ -221,6 +224,7 @@ impl SlashCommand {
+             | SlashCommand::Hooks
+             | SlashCommand::Status
+             | SlashCommand::Usage
++            | SlashCommand::Meter
+             | SlashCommand::DebugConfig
+             | SlashCommand::Ps
+             | SlashCommand::Stop

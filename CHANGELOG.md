@@ -1,0 +1,18 @@
+# Changelog
+
+All notable changes to Codex Meter are documented here.
+
+## [0.11.1] - 2026-08-12
+
+First public Linux release.
+
+- Interactive day, week, month, all-time, and history views.
+- Keyboard menu and searchable slash-command palette.
+- Network/response view with TTFT, end-to-end latency, and clearly marked estimated Token throughput.
+- Local rollout JSONL import with replay/fork deduplication.
+- Per-OS-user storage and optional manual account labels.
+- Content-free OTLP, App Server, and network diagnostic adapters.
+- Versioned API-equivalent pricing with unknown prices shown as `N/A`.
+- One-line, no-sudo Linux installer.
+
+[0.11.1]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.11.1
