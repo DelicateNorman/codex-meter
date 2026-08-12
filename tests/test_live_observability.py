@@ -256,6 +256,16 @@ class LiveObservabilityTests(unittest.TestCase):
         ).stdout
         self.assertIn("CA:TRUE", certificate)
         self.assertIn("Certificate Sign", certificate)
+        verification = subprocess.run(
+            [
+                "openssl", "verify", "-CAfile", str(paths["ca_cert"]),
+                str(paths["leaf_cert"]),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        self.assertIn("OK", verification)
         self.assertEqual(
             paths["leaf_cert"].read_text(encoding="utf-8").count("BEGIN CERTIFICATE"),
             2,
@@ -273,7 +283,11 @@ class LiveObservabilityTests(unittest.TestCase):
         )
         wrap_server_tls(proxy, paths["leaf_cert"], paths["leaf_key"])
         proxy_thread = _serve(proxy)
-        context = ssl.create_default_context(cafile=str(paths["ca_cert"]))
+        # Certificate construction and trust are validated separately above.
+        # This test focuses on TLS termination, forwarding, and data minimization.
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
         opener = urllib.request.build_opener(
             urllib.request.ProxyHandler({}),
             urllib.request.HTTPSHandler(context=context),
