@@ -368,22 +368,59 @@ def initialize_tls_material(directory: Path) -> dict[str, Path]:
         leaf_key = temp / "leaf-key.pem"
         leaf_csr = temp / "leaf.csr"
         leaf_cert = temp / "leaf.pem"
-        extensions = temp / "extensions.cnf"
-        extensions.write_text(
-            "basicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\n"
-            "extendedKeyUsage=serverAuth\nsubjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1\n",
+        ca_database = temp / "index.txt"
+        ca_serial = temp / "serial"
+        new_certificates = temp / "newcerts"
+        openssl_config = temp / "openssl.cnf"
+        ca_database.write_text("", encoding="utf-8")
+        ca_serial.write_text("1000\n", encoding="ascii")
+        new_certificates.mkdir()
+        openssl_config.write_text(
+            "[ req ]\n"
+            "distinguished_name = ca_dn\n"
+            "x509_extensions = v3_ca\n"
+            "prompt = no\n"
+            "[ ca_dn ]\n"
+            "CN = Codex Meter Local Diagnostic CA\n"
+            "[ v3_ca ]\n"
+            "basicConstraints = critical,CA:TRUE\n"
+            "keyUsage = critical,keyCertSign,cRLSign\n"
+            "subjectKeyIdentifier = hash\n"
+            "authorityKeyIdentifier = keyid:always,issuer\n"
+            "[ ca ]\n"
+            "default_ca = local_ca\n"
+            "[ local_ca ]\n"
+            f"database = {ca_database.as_posix()}\n"
+            f"serial = {ca_serial.as_posix()}\n"
+            f"new_certs_dir = {new_certificates.as_posix()}\n"
+            f"certificate = {ca_cert.as_posix()}\n"
+            f"private_key = {ca_key.as_posix()}\n"
+            "default_days = 30\n"
+            "default_md = sha256\n"
+            "policy = local_policy\n"
+            "x509_extensions = server_cert\n"
+            "unique_subject = no\n"
+            "[ local_policy ]\n"
+            "commonName = supplied\n"
+            "[ server_cert ]\n"
+            "basicConstraints = critical,CA:FALSE\n"
+            "keyUsage = critical,digitalSignature,keyEncipherment\n"
+            "extendedKeyUsage = serverAuth\n"
+            "subjectKeyIdentifier = hash\n"
+            "authorityKeyIdentifier = keyid:always,issuer\n"
+            "subjectAltName = DNS:localhost,IP:127.0.0.1,IP:::1\n",
             encoding="utf-8",
         )
         _openssl([
             "req", "-x509", "-newkey", "rsa:3072", "-nodes", "-days", "30", "-sha256",
-            "-subj", "/CN=Codex Meter Local Diagnostic CA",
-            "-addext", "basicConstraints=critical,CA:TRUE",
-            "-addext", "keyUsage=critical,keyCertSign,cRLSign",
-            "-addext", "subjectKeyIdentifier=hash",
+            "-config", str(openssl_config),
             "-keyout", str(ca_key), "-out", str(ca_cert),
         ])
         _openssl(["req", "-newkey", "rsa:2048", "-nodes", "-sha256", "-subj", "/CN=localhost", "-keyout", str(leaf_key), "-out", str(leaf_csr)])
-        _openssl(["x509", "-req", "-in", str(leaf_csr), "-CA", str(ca_cert), "-CAkey", str(ca_key), "-CAcreateserial", "-days", "30", "-sha256", "-extfile", str(extensions), "-out", str(leaf_cert)])
+        _openssl([
+            "ca", "-batch", "-notext", "-config", str(openssl_config),
+            "-in", str(leaf_csr), "-out", str(leaf_cert),
+        ])
         _ensure_certificate_chain(leaf_cert, ca_cert)
         for source, target in ((ca_cert, paths["ca_cert"]), (ca_key, paths["ca_key"]), (leaf_cert, paths["leaf_cert"]), (leaf_key, paths["leaf_key"])):
             os.replace(source, target)
