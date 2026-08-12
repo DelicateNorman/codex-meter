@@ -623,6 +623,7 @@ fn short_error(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
     use std::io::Cursor;
 
     #[test]
