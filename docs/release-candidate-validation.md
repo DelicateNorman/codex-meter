@@ -1,8 +1,8 @@
 # Rust 0.16 release-candidate validation
 
 Validation date: 2026-08-12  
-Candidate branch: `rust-rewrite`  
-Candidate commit: `bc94eb969192eb3559082c657a77fabec3075c26`
+Candidate branch: `main`
+Current beta commit: `c944bd5e07a3637ed0dea013f4e3418ebb621b69`
 
 ## Outcome
 
@@ -19,6 +19,12 @@ Its [tagged release run](https://github.com/DelicateNorman/codex-meter/actions/r
 passed the same four-platform build and acceptance matrix, published only the
 four native Rust executables plus `SHA256SUMS`, and then repeated one-line
 installation and rollback from the public URLs on all four platforms.
+
+The macOS Terminal row-drift regression reported against beta.1 was corrected
+in [v0.16.0-beta.2](https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.0-beta.2).
+Its [tagged release run](https://github.com/DelicateNorman/codex-meter/actions/runs/31612267447)
+passed the complete four-platform build, native-terminal, installation,
+checksum, history-preservation, rollback, publication, and public-URL matrix.
 
 ## Per-platform release rehearsal
 
@@ -45,6 +51,7 @@ Linux and both macOS runners used native pseudo-terminals. Windows used a native
 ConPTY session. Each release executable was opened interactively at 120×30 and
 verified the following sequence:
 
+- every raw-mode screen row uses CRLF and therefore returns to column zero;
 - the dashboard selects Today;
 - Right selects Week;
 - `/` opens the English command palette;
@@ -52,8 +59,11 @@ verified the following sequence:
 - `Esc` returns to the main dashboard;
 - `q` then exits successfully.
 
-This is a real automated terminal session on each operating system. It is not a
-manual recording from Terminal.app or Windows Terminal.
+The CRLF assertion covers the exact beta.1 failure: the old bare-LF renderer
+could contain all expected text while drawing each next row at the previous
+row's ending column in macOS Terminal. This is a real automated terminal session
+on each operating system. It is not a manual recording from Terminal.app or
+Windows Terminal.
 
 ## Real SSH synchronization
 
@@ -66,12 +76,17 @@ removed after verification.
 
 ## Live history preservation
 
-The final public beta was installed and rolled back in an isolated bin directory
+The public beta.1 was installed and rolled back in an isolated bin directory
 while `CODEX_METER_HOME` pointed to the development user's real
 `~/.codex-meter`. SHA-256 hashes for every file under that directory matched
 exactly before installation, after upgrade, and after rollback. The installed
 candidate hash matched the public Linux asset. The real
 `~/.local/bin/codex-meter` was not replaced and remains v0.14.2.
+
+Beta.2 repeated the same exact-manifest preservation check on all four release
+runners using seeded v0.15 histories. A development-host check against the live
+home was deliberately not forced while existing `codex-meter` processes were
+active; the hotfix changes only terminal row separators and no storage path.
 
 ## Remaining stable-release checks
 
