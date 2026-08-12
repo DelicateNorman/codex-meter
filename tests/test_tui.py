@@ -3,7 +3,15 @@ from __future__ import annotations
 import os
 import unittest
 
-from codex_meter.interactive import InteractiveState, _read_key, handle_key, parse_slash_command, render_interactive_screen
+from codex_meter.interactive import (
+    COMMAND_ITEMS,
+    InteractiveState,
+    _read_key,
+    _sync_projects,
+    handle_key,
+    parse_slash_command,
+    render_interactive_screen,
+)
 from codex_meter.tui import render_history, render_network, render_overview
 
 
@@ -111,7 +119,14 @@ class TuiTests(unittest.TestCase):
         )
         self.assertIn("Commands · 6-10 of 12", rendered)
         self.assertIn("▶ /history week", rendered)
-        self.assertIn("按周查看历史变化", rendered)
+        self.assertIn("Show weekly usage history", rendered)
+        self.assertTrue(all(item.description.isascii() for item in COMMAND_ITEMS))
+
+    def test_project_order_from_storage_is_preserved_and_deduplicated(self) -> None:
+        state = InteractiveState(project_filter="older")
+        _sync_projects(state, ["recent", "older", "recent", ""])
+        self.assertEqual(state.project_options, ("recent", "older"))
+        self.assertEqual(state.project_selected, 2)
 
     def test_project_picker_applies_scope_and_preserves_it_across_views(self) -> None:
         state = InteractiveState(project_options=("alpha", "beta"))
@@ -148,6 +163,27 @@ class TuiTests(unittest.TestCase):
         self.assertIn("dashboard", rendered)
         self.assertLess(rendered.index("dashboard"), rendered.index("▶ Today"))
         self.assertNotIn("\x1b", rendered)
+
+    def test_wide_short_screen_wraps_menu_and_preserves_panel_bottom(self) -> None:
+        body = "\n".join([
+            "╭" + "─" * 20 + "╮",
+            *[f"│ row {index:<14} │" for index in range(20)],
+            "╰" + "─" * 20 + "╯",
+        ])
+        rendered = render_interactive_screen(
+            InteractiveState(active_view="month", selected=2, message="Month"),
+            body,
+            width=180,
+            height=18,
+            color=False,
+            clear=False,
+        )
+        lines = rendered.splitlines()
+        self.assertIn("terminal too short", rendered)
+        self.assertIn("╰────────────────────╯", rendered)
+        self.assertIn("Project", rendered)
+        self.assertTrue(all(len(line) <= 132 for line in lines))
+        self.assertNotEqual(lines[-1], "● Month")
 
     def test_history_renderer_is_compact_and_handles_unknown_cost(self) -> None:
         rendered = render_history(

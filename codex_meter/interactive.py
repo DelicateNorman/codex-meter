@@ -42,18 +42,18 @@ MENU_ITEMS = (
 )
 
 COMMAND_ITEMS = (
-    CommandItem("today", "查看今天的使用统计"),
-    CommandItem("week", "查看本周汇总"),
-    CommandItem("month", "查看本月汇总"),
-    CommandItem("all", "查看从首次使用至今的汇总"),
-    CommandItem("history day", "按天查看历史变化"),
-    CommandItem("history week", "按周查看历史变化"),
-    CommandItem("history month", "按月查看历史变化"),
-    CommandItem("network", "查看 Token 速度与响应延迟"),
-    CommandItem("project", "选择一个项目或全部项目"),
-    CommandItem("refresh", "重新读取本机 Codex 记录"),
-    CommandItem("help", "显示键盘和命令帮助"),
-    CommandItem("quit", "退出 Codex Meter"),
+    CommandItem("today", "View today's usage"),
+    CommandItem("week", "View this week's usage"),
+    CommandItem("month", "View this month's usage"),
+    CommandItem("all", "View usage since first use"),
+    CommandItem("history day", "Show daily usage history"),
+    CommandItem("history week", "Show weekly usage history"),
+    CommandItem("history month", "Show monthly usage history"),
+    CommandItem("network", "Show token speed and response latency"),
+    CommandItem("project", "Choose one project or all projects"),
+    CommandItem("refresh", "Reload local Codex records"),
+    CommandItem("help", "Show keyboard and command help"),
+    CommandItem("quit", "Exit Codex Meter"),
 )
 
 
@@ -154,34 +154,36 @@ def render_interactive_screen(
 ) -> str:
     width = max(40, width)
     height = max(12, height)
+    layout_width = min(width, 132)
     title = "CODEX METER · INTERACTIVE"
-    menu = _menu_lines(state, width, color)
+    menu = _menu_lines(state, layout_width, color)
     if state.command_mode:
         controls = "Slash input · ↑/↓ choose · Enter run · Esc back"
     elif state.project_picker:
         controls = "Project scope · ↑/↓ choose · Enter/Space apply · Esc cancel"
     else:
         controls = "Arrows choose · Enter/Space open · / commands · r refresh · q quit"
-    prompt = f"/{state.command_text}▌" if state.command_mode else f"● {state.message}"
+    prompt = f"/{state.command_text}▌"
     header = [
         _style(title, CYAN, color),
-        _style("─" * min(width, 132), BLUE, color),
+        _style("─" * layout_width, BLUE, color),
     ]
-    body = _help_text(width) if state.show_help else content
+    body = _help_text(layout_width) if state.show_help else content
     body_lines = body.splitlines()
+    status = f"Scope · {_scope_label(state)}"
+    if _show_message_in_status(state):
+        status += f"  │  {state.message}"
     footer = [
-        _style("─" * min(width, 132), BLUE, color),
-        _style(f"Scope · {_scope_label(state)}"[:width], GREEN, color),
+        _style("─" * layout_width, BLUE, color),
+        _style(status[:layout_width], GREEN, color),
         *menu,
-        _style(controls[:width], MUTED, color),
+        _style(controls[:layout_width], MUTED, color),
     ]
     if state.command_mode:
-        footer.extend(_command_palette_lines(state, width, color))
-    footer.append(_style(prompt[:width], LIGHT if state.command_mode else GREEN, color))
+        footer.extend(_command_palette_lines(state, layout_width, color))
+        footer.append(_style(prompt[:layout_width], LIGHT, color))
     available = max(1, height - len(header) - len(footer))
-    clipped = body_lines[:available]
-    if len(body_lines) > available:
-        clipped[-1:] = [_style("… terminal too short; enlarge it to see more"[:width], YELLOW, color)]
+    clipped = _clip_body(body_lines, available, layout_width, color)
     prefix = "\x1b[H\x1b[2J" if clear else ""
     return prefix + "\n".join([*header, *clipped, *footer])
 
@@ -317,10 +319,15 @@ def _handle_project_key(state: InteractiveState, key: str) -> str | None:
 
 
 def _sync_projects(state: InteractiveState, projects: list[str]) -> None:
-    state.project_options = tuple(sorted(
-        {str(project) for project in projects if str(project).strip()},
-        key=str.casefold,
-    ))
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for project in projects:
+        name = str(project)
+        if not name.strip() or name in seen:
+            continue
+        seen.add(name)
+        ordered.append(name)
+    state.project_options = tuple(ordered)
     if state.project_filter not in state.project_options:
         state.project_filter = None
     state.project_selected = (
@@ -460,6 +467,26 @@ def _scope_label(state: InteractiveState) -> str:
 
 def _safe_label(value: str) -> str:
     return "".join(character for character in str(value) if character.isprintable()).strip()[:96]
+
+
+def _show_message_in_status(state: InteractiveState) -> bool:
+    return bool(
+        state.message
+        and state.message != _label_for(state.active_view)
+        and not state.message.startswith("Scope:")
+    )
+
+
+def _clip_body(lines: list[str], available: int, width: int, color: bool) -> list[str]:
+    if len(lines) <= available:
+        return lines
+    warning = _style("… terminal too short; enlarge it to see more"[:width], YELLOW, color)
+    if available == 1:
+        return [warning]
+    closing_frame = lines[-1] if "╰" in lines[-1] and "╯" in lines[-1] else None
+    if closing_frame is not None and available >= 2:
+        return [*lines[: available - 2], warning, closing_frame]
+    return [*lines[: available - 1], warning]
 
 
 def _help_text(width: int) -> str:

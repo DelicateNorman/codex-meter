@@ -1052,11 +1052,18 @@ class Storage:
             params = (self.owner_username,)
         rows = self.connection.execute(
             f"""
-            SELECT COALESCE(s.project_name, 'Unknown') AS project
-            FROM sessions s
-            WHERE {owner_clause}
-            GROUP BY s.project_name
-            ORDER BY project COLLATE NOCASE
+            WITH project_activity AS (
+                SELECT s.project_name,
+                       COALESCE(c.completed_at, c.started_at, s.ended_at, s.started_at) AS used_at
+                FROM sessions s
+                LEFT JOIN llm_calls c ON c.session_id=s.id
+                WHERE {owner_clause}
+            )
+            SELECT COALESCE(project_name, 'Unknown') AS project,
+                   MAX(used_at) AS last_used_at
+            FROM project_activity
+            GROUP BY project_name
+            ORDER BY last_used_at DESC, project COLLATE NOCASE
             """,
             params,
         )

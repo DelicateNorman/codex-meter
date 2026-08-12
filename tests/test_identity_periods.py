@@ -51,7 +51,7 @@ class IdentityAndPeriodTests(unittest.TestCase):
                 self.assertEqual(
                     storage.overview(account="work", project="beta")["total_tokens"], 200,
                 )
-                self.assertEqual(storage.project_names(), ["alpha", "beta"])
+                self.assertEqual(storage.project_names(), ["beta", "alpha"])
                 self.assertEqual(len(storage.usage_history("day", project="beta")), 1)
                 self.assertEqual(len(storage.usage_history("day")), 2)
                 labels = {row["account"] for row in storage.account_breakdown()}

@@ -2,6 +2,13 @@
 
 All notable changes to Codex Meter are documented here.
 
+## [0.12.1] - 2026-08-12
+
+- Sort the interactive project picker by most recent activity.
+- Use English descriptions throughout the slash-command palette.
+- Keep dashboard frames visually closed when a short terminal clips their contents.
+- Keep the bottom menu within the dashboard width and remove its redundant status row.
+
 ## [0.12.0] - 2026-08-12
 
 - Add an interactive `Project` selector with `All projects` as the default.
@@ -28,6 +35,7 @@ First public Linux release.
 - Versioned API-equivalent pricing with unknown prices shown as `N/A`.
 - One-line, no-sudo Linux installer.
 
+[0.12.1]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.12.1
 [0.12.0]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.12.0
 [0.11.2]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.11.2
 [0.11.1]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.11.1
