@@ -126,7 +126,7 @@ def build_parser() -> argparse.ArgumentParser:
     network_capture = network_sub.add_parser("capture", help="capture only packet direction/length with tcpdump")
     network_capture.add_argument("--host", action="append", default=[])
     network_capture.add_argument("--port", type=int, default=443)
-    network_capture.add_argument("--interface", default="any")
+    network_capture.add_argument("--interface", help="capture interface (default: auto-detect)")
     network_capture.add_argument("--duration", type=float, default=15.0)
     network_capture.add_argument("--packet-limit", type=int, default=5000)
     network_show = network_sub.add_parser("show", help="show recent saved network flows")

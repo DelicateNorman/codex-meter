@@ -1,6 +1,6 @@
 # Contributing
 
-Codex Meter currently targets Linux and Python 3.11+. Bug reports, privacy reviews, documentation fixes, and focused pull requests are welcome.
+Codex Meter targets Linux, macOS, and native Windows with Python 3.11+. Bug reports, privacy reviews, documentation fixes, and focused pull requests are welcome.
 
 ## Development setup
 
@@ -14,6 +14,8 @@ python -m pip install -e .
 python -m unittest discover -v
 ```
 
+On Windows PowerShell, activate the environment with `.\.venv\Scripts\Activate.ps1`. CI runs the suite on Linux, macOS arm64/x86_64, and Windows.
+
 Please keep collection content-free: prompts, responses, reasoning text, commands, tool output, headers, cookies, credentials, and authentication files must never be persisted.
 
-Before opening a pull request, run the full test suite and describe any user-visible behavior changes. Platform work for macOS and Windows should include platform-specific installation and terminal-navigation tests.
+Before opening a pull request, run the full test suite and describe any user-visible behavior changes. Platform changes should preserve native keyboard navigation and include platform-specific installation or packaging verification.

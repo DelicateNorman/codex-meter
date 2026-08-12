@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import socket
 import socketserver
 import ssl
@@ -12,10 +14,12 @@ import unittest
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from codex_meter.collectors.app_server import AppServerAdapter, _pump
 from codex_meter.collectors.otlp_http import OtlpServer, parse_logs, parse_metrics
-from codex_meter.network import TunnelProxyServer, parse_tcpdump
+from codex_meter.network import TunnelProxyServer, _default_capture_interface, parse_tcpdump
 from codex_meter.pricing import PricingCatalog
 from codex_meter.proxy import ReverseProxyServer, initialize_tls_material, wrap_server_tls
 from codex_meter.storage import Storage
@@ -149,6 +153,14 @@ class LiveObservabilityTests(unittest.TestCase):
         self.assertEqual(flows[0].packets_out, 1)
         self.assertEqual(flows[0].packets_in, 1)
 
+    def test_capture_interface_prefers_platform_aggregate_devices(self) -> None:
+        listing = "1.en0 [Up, Running]\n2.pktap [Up, Running]\n"
+        with patch(
+            "codex_meter.network.subprocess.run",
+            return_value=SimpleNamespace(stdout=listing),
+        ):
+            self.assertEqual(_default_capture_interface("tcpdump"), "pktap")
+
     def test_connect_tunnel_proxies_bytes_and_saves_only_counts(self) -> None:
         echo = _EchoServer(("127.0.0.1", 0), _EchoHandler)
         echo_thread = _serve(echo)
@@ -230,10 +242,12 @@ class LiveObservabilityTests(unittest.TestCase):
         self.assertEqual(row["http_status"], 101)
         self._assert_database_excludes("TOP SECRET")
 
+    @unittest.skipUnless(shutil.which("openssl"), "openssl is optional")
     def test_tls_material_is_private_and_reusable(self) -> None:
         paths = initialize_tls_material(self.root / "tls")
         self.assertTrue(paths["ca_cert"].exists())
-        self.assertEqual(paths["ca_key"].stat().st_mode & 0o777, 0o600)
+        if os.name != "nt":
+            self.assertEqual(paths["ca_key"].stat().st_mode & 0o777, 0o600)
         certificate = subprocess.run(
             ["openssl", "x509", "-in", str(paths["ca_cert"]), "-noout", "-text"],
             check=True,
@@ -244,6 +258,7 @@ class LiveObservabilityTests(unittest.TestCase):
         self.assertIn("Certificate Sign", certificate)
         self.assertEqual(paths, initialize_tls_material(self.root / "tls"))
 
+    @unittest.skipUnless(shutil.which("openssl"), "openssl is optional")
     def test_explicit_tls_reverse_proxy_terminates_and_reencrypts(self) -> None:
         upstream = ThreadingHTTPServer(("127.0.0.1", 0), _SseHandler)
         upstream_thread = _serve(upstream)

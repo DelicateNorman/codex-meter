@@ -88,13 +88,16 @@ def probe_endpoint(host: str, port: int = 443, timeout: float = 10.0) -> Network
 
 
 def capture_metadata(
-    hosts: list[str], *, interface: str = "any", port: int = 443,
+    hosts: list[str], *, interface: str | None = None, port: int = 443,
     duration: float = 15.0, packet_limit: int = 5000,
 ) -> tuple[list[NetworkFlowRecord], str | None]:
     """Run tcpdump without -X/-A/-w and aggregate only packet direction and length."""
     tcpdump = shutil.which("tcpdump")
     if not tcpdump:
         return [], "tcpdump not found"
+    interface = interface or _default_capture_interface(tcpdump)
+    if not interface:
+        return [], "tcpdump did not report a usable capture interface"
     resolved: dict[str, str] = {}
     for host in hosts:
         try:
@@ -124,6 +127,29 @@ def capture_metadata(
     if process.returncode not in (0, -15) and not flows:
         error = _safe_tcpdump_error(stderr)
     return flows, error
+
+
+def _default_capture_interface(tcpdump: str) -> str | None:
+    """Choose an interface exposed by this platform's tcpdump build."""
+    try:
+        result = subprocess.run(
+            [tcpdump, "-D"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    names: list[str] = []
+    for line in result.stdout.splitlines():
+        match = re.match(r"^\s*\d+\.(\S+)", line)
+        if match:
+            names.append(match.group(1))
+    for preferred in ("any", "pktap", "en0"):
+        if preferred in names:
+            return preferred
+    return names[0] if names else None
 
 
 def parse_tcpdump(lines: Iterable[str], remote_ips: dict[str, str], port: int = 443) -> list[NetworkFlowRecord]:

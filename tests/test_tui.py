@@ -9,6 +9,7 @@ from codex_meter.interactive import (
     _display_width,
     _project_picker_text,
     _read_key,
+    _decode_windows_character,
     _sync_projects,
     handle_key,
     parse_slash_command,
@@ -65,6 +66,7 @@ class TuiTests(unittest.TestCase):
         self.assertEqual(handle_key(state, "space"), "view")
         self.assertEqual(state.active_view, "month")
 
+    @unittest.skipIf(os.name == "nt", "POSIX byte-stream key decoding")
     def test_fast_arrow_and_enter_remain_two_keys(self) -> None:
         read_fd, write_fd = os.pipe()
         try:
@@ -75,6 +77,7 @@ class TuiTests(unittest.TestCase):
             os.close(read_fd)
             os.close(write_fd)
 
+    @unittest.skipIf(os.name == "nt", "POSIX byte-stream key decoding")
     def test_key_reader_accepts_multibyte_utf8_input(self) -> None:
         read_fd, write_fd = os.pipe()
         try:
@@ -84,6 +87,13 @@ class TuiTests(unittest.TestCase):
         finally:
             os.close(read_fd)
             os.close(write_fd)
+
+    def test_windows_console_characters_map_to_interactive_keys(self) -> None:
+        self.assertEqual(_decode_windows_character("\r"), "enter")
+        self.assertEqual(_decode_windows_character(" "), "space")
+        self.assertEqual(_decode_windows_character("\x08"), "backspace")
+        self.assertEqual(_decode_windows_character("\x1b"), "escape")
+        self.assertEqual(_decode_windows_character("中"), "中")
 
     def test_slash_commands_switch_refresh_and_quit(self) -> None:
         state = InteractiveState()

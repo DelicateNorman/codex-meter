@@ -2,6 +2,16 @@
 
 All notable changes to Codex Meter are documented here.
 
+## [0.14.0] - 2026-08-12
+
+- Add native interactive keyboard handling and ANSI console setup for Windows.
+- Replace POSIX pipe polling in the live quota reader with a cross-platform reader.
+- Add standalone Linux, macOS arm64/x86_64, and Windows x86_64 release binaries.
+- Add checksum-verifying one-line installers for Linux/macOS and Windows PowerShell.
+- Auto-detect tcpdump interfaces so passive metadata capture works with macOS interface names.
+- Test source installs on Linux, macOS arm64/x86_64, and Windows in GitHub Actions.
+- Add an automated tagged-release workflow that builds, smoke-tests, checksums, and publishes every platform asset.
+
 ## [0.13.0] - 2026-08-12
 
 - Show live account weekly limits, used/remaining percentages, and local reset times in the interactive overview.
@@ -66,6 +76,7 @@ First public Linux release.
 - Versioned API-equivalent pricing with unknown prices shown as `N/A`.
 - One-line, no-sudo Linux installer.
 
+[0.14.0]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.14.0
 [0.13.0]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.13.0
 [0.12.4]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.12.4
 [0.12.3]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.12.3

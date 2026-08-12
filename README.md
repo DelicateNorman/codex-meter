@@ -1,30 +1,40 @@
 # Codex Meter
 
-Codex Meter is a local-first usage and performance observability CLI for Codex. Version 0.13 adds live account weekly-limit display to the keyboard-driven interactive home screen, alongside the global project selector, rollout import, daily/weekly/monthly/all-time reporting, latency/cache/retry/compaction analysis, and content-free network diagnostics.
+Codex Meter is a local-first usage and performance observability CLI for Codex. Version 0.14 runs natively on Linux, macOS, and Windows and ships as standalone executables, while retaining live account weekly limits, project selection, rollout import, daily/weekly/monthly/all-time reporting, latency/cache/retry/compaction analysis, and content-free network diagnostics.
 
 It never imports prompts, model responses, reasoning content, shell commands, tool output, headers, cookies, or credentials.
 
-## Platform support
+## Install
 
-The first public release officially supports **Linux** with Python 3.11 or newer. macOS and Windows are planned but are not yet tested or supported release targets.
+Standalone releases do not require Python and never replace the official `codex` command.
 
-## Install on Linux
+### Linux and macOS
 
-Install the latest stable release for the current user without `sudo`:
+Install for the current user without `sudo`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.13.0/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.14.0/install.sh | sh
 ```
 
-Then run:
+### Windows PowerShell
+
+Install for the current Windows user without Administrator privileges:
+
+```powershell
+irm https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.14.0/install.ps1 | iex
+```
+
+Open a new terminal, then run:
 
 ```bash
 codex-meter
 ```
 
-The installer places the program under `~/.local/share/codex-meter` and the command under `~/.local/bin`. It does not modify the official `codex` command or delete existing data in `~/.codex-meter`. You can [read the installer](install.sh) before running it.
+The shell installer places the command under `~/.local/bin`. The PowerShell installer uses `%LOCALAPPDATA%\Programs\CodexMeter\bin` and adds that directory to the current user's `PATH`. Both download the matching standalone release, verify it against the release's `SHA256SUMS`, and preserve existing data under `~/.codex-meter`. You can inspect [install.sh](install.sh) and [install.ps1](install.ps1) before running them.
 
-Stable versions and source archives are published on the [Releases page](https://github.com/DelicateNorman/codex-meter/releases). The command above is pinned to the tested `v0.13.0` release so that installation is reproducible.
+Stable binaries, wheels, checksums, and source archives are published on the [Releases page](https://github.com/DelicateNorman/codex-meter/releases). The commands above are pinned to the tested `v0.14.0` release so installation is reproducible.
+
+Supported release targets are Linux x86_64, macOS arm64 and x86_64, and native Windows x86_64. Windows on ARM can run the x86_64 build through Windows emulation. When Codex itself runs inside WSL2, install the Linux build inside that WSL distribution so Codex Meter reads the same `~/.codex` history.
 
 ## Build from source
 
@@ -81,7 +91,7 @@ By default local state is created with user-only directory permissions:
 
 Override it with `CODEX_METER_HOME` or `--home`.
 
-Each operating-system user gets a separate default database because `~` resolves to that user's home. Sessions also record the non-secret owner UID and username, and aggregate views stay scoped to that owner if a database is explicitly shared. Other Linux users' Codex homes are not scanned.
+Each operating-system user gets a separate default database because `~` resolves to that user's home. Sessions also record the non-secret owner UID where available and the username, and aggregate views stay scoped to that owner if a database is explicitly shared. Other users' Codex homes are not scanned.
 
 Account tracking is optional and disabled by default. It uses only a manually chosen local label and never reads Codex credentials, `auth.json`, tokens, or email addresses:
 
@@ -141,6 +151,7 @@ codex_meter/
 ├── interactive.py            keyboard navigation and slash commands
 ├── doctor.py                 runtime/schema capability detection
 └── cli.py                    command entry point
+packaging/                     standalone executable entry point
 tests/                        automated reconciliation/privacy tests
 ```
 
@@ -276,7 +287,7 @@ codex-meter network capture --host api.openai.com --host chatgpt.com --duration 
 codex-meter proxy tunnel --port 8899
 ```
 
-`network capture` runs tcpdump without `-A`, `-X`, or `-w` and records only resolved destination, packet direction/count/length, and elapsed time. Linux packet capture permissions are still enforced by the OS. `proxy tunnel` is an HTTP CONNECT tunnel and keeps TLS opaque.
+`network capture` runs tcpdump without `-A`, `-X`, or `-w` and records only resolved destination, packet direction/count/length, and elapsed time. Linux and macOS capture interfaces are auto-detected, while packet-capture permissions are still enforced by the OS. Native Windows builds retain response timing, socket probes, and proxy diagnostics; passive capture requires a compatible tcpdump installation. `proxy tunnel` is an HTTP CONNECT tunnel and keeps TLS opaque.
 
 The reverse proxy is useful with Codex's current ChatGPT/WebSocket transport:
 
@@ -305,11 +316,11 @@ The exact 0.146.1 source/schema audit is recorded in [`docs/codex-0.146.1-schema
 python3 -m unittest discover -v
 ```
 
-Tests cover cumulative-event duplication, fork/replay reconciliation, exact raw-response precedence, weekly-limit extraction and rendering, daily/weekly/monthly period boundaries, OS-user isolation, opt-in account labels, OTLP parsing/HTTP ingestion, App Server lifecycle usage, cache pricing, latency percentiles, tcpdump metadata parsing, CONNECT tunnels, HTTP/SSE and WebSocket reverse proxying, TLS termination/re-encryption, idempotent storage, privacy, and `N/A` rendering.
+Tests run on Linux, macOS arm64/x86_64, and Windows. They cover native terminal-key handling, cumulative-event duplication, fork/replay reconciliation, exact raw-response precedence, weekly-limit extraction and rendering, daily/weekly/monthly period boundaries, OS-user isolation, opt-in account labels, OTLP parsing/HTTP ingestion, App Server lifecycle usage, cache pricing, latency percentiles, tcpdump metadata parsing, CONNECT tunnels, HTTP/SSE and WebSocket reverse proxying, TLS termination/re-encryption when OpenSSL is available, idempotent storage, privacy, and `N/A` rendering.
 
 ## Remaining work toward 1.0
 
-- Add tested, native installation and terminal support for macOS and Windows.
+- Add optional code signing/notarization for standalone macOS and Windows binaries; current release checksums provide integrity verification.
 - External `watch` and `statusline` are available now. A version-pinned upstream TUI patch for native `/meter` is included in [`integrations/`](integrations/); it has passed Rust compile, Clippy, command-order and snapshot tests but is not applied to the installed Codex binary automatically.
 - Provider-specific deep timing adapters beyond OpenAI/ChatGPT remain future work; generic provider and root/subagent attribution are available now.
 - Transparent OS-wide packet interception is intentionally not attempted; capture permissions and explicit proxy configuration remain visible to the user.

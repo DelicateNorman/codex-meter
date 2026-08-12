@@ -6,11 +6,15 @@ import os
 import select
 import shutil
 import sys
-import termios
-import tty
 import unicodedata
 from dataclasses import dataclass
 from typing import Callable, TextIO
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import termios
+    import tty
 
 from .tui import BLUE, CYAN, GREEN, LIGHT, MUTED, RESET, YELLOW
 
@@ -237,11 +241,14 @@ def run_interactive(
     _sync_projects(state, list_projects() if list_projects else [])
     last_content = ""
     fd = input_stream.fileno()
-    previous = termios.tcgetattr(fd)
+    previous = termios.tcgetattr(fd) if os.name != "nt" else None
+    if os.name == "nt":
+        _enable_windows_vt(output_stream)
     output_stream.write("\x1b[?1049h\x1b[?25l")
     output_stream.flush()
     try:
-        tty.setcbreak(fd)
+        if os.name != "nt":
+            tty.setcbreak(fd)
         while state.running:
             size = shutil.get_terminal_size((110, 30))
             if state.project_picker:
@@ -292,7 +299,8 @@ def run_interactive(
     except KeyboardInterrupt:
         pass
     finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, previous)
+        if os.name != "nt" and previous is not None:
+            termios.tcsetattr(fd, termios.TCSADRAIN, previous)
         output_stream.write("\x1b[?25h\x1b[?1049l")
         output_stream.flush()
     return 0
@@ -651,6 +659,8 @@ def _help_text(width: int) -> str:
 
 
 def _read_key(fd: int) -> str:
+    if os.name == "nt":
+        return _read_windows_key()
     value = os.read(fd, 1)
     if value == b"\x1b":
         if not select.select([fd], [], [], 0.03)[0]:
@@ -692,6 +702,44 @@ def _read_key(fd: int) -> str:
         return value.decode("utf-8")
     except UnicodeDecodeError:
         return ""
+
+
+def _read_windows_key() -> str:
+    value = msvcrt.getwch()
+    if value in ("\x00", "\xe0"):
+        return {
+            "H": "up",
+            "P": "down",
+            "M": "right",
+            "K": "left",
+        }.get(msvcrt.getwch(), "")
+    return _decode_windows_character(value)
+
+
+def _decode_windows_character(value: str) -> str:
+    return {
+        "\r": "enter",
+        "\n": "enter",
+        " ": "space",
+        "\x08": "backspace",
+        "\x1b": "escape",
+        "\x03": "ctrl_c",
+    }.get(value, value if value.isprintable() else "")
+
+
+def _enable_windows_vt(output_stream: TextIO) -> None:
+    """Enable ANSI rendering in native Windows consoles when available."""
+    try:
+        import ctypes
+
+        handle = ctypes.windll.kernel32.GetStdHandle(-11)
+        mode = ctypes.c_ulong()
+        if handle and ctypes.windll.kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            ctypes.windll.kernel32.SetConsoleMode(handle, mode.value | 0x0004)
+    except (AttributeError, OSError):
+        # Redirected streams and older console hosts may not expose a console
+        # handle. Rendering still remains usable in modern terminal hosts.
+        return
 
 
 def _style(text: str, style: str, color: bool) -> str:

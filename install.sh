@@ -2,65 +2,69 @@
 set -eu
 
 repository="DelicateNorman/codex-meter"
-version="${CODEX_METER_VERSION:-v0.13.0}"
-install_root="${CODEX_METER_INSTALL_ROOT:-$HOME/.local/share/codex-meter}"
+version="${CODEX_METER_VERSION:-v0.14.0}"
 bin_dir="${CODEX_METER_BIN_DIR:-$HOME/.local/bin}"
-python_command="${PYTHON:-python3}"
 
-if [ "$(uname -s)" != "Linux" ]; then
-    echo "codex-meter's one-line installer currently supports Linux only." >&2
-    echo "macOS and Windows support is planned; see the source-build guide for development use." >&2
+case "$(uname -s)" in
+    Linux) platform="linux" ;;
+    Darwin) platform="macos" ;;
+    *)
+        echo "This installer supports Linux and macOS. On Windows, use install.ps1." >&2
+        exit 1
+        ;;
+esac
+
+case "$(uname -m)" in
+    x86_64|amd64) architecture="x86_64" ;;
+    arm64|aarch64) architecture="arm64" ;;
+    *)
+        echo "Unsupported CPU architecture: $(uname -m)" >&2
+        exit 1
+        ;;
+esac
+
+if [ "$platform" = "linux" ] && [ "$architecture" != "x86_64" ]; then
+    echo "The standalone Linux release currently supports x86_64; use the source-build guide on this machine." >&2
     exit 1
 fi
 
-if ! command -v "$python_command" >/dev/null 2>&1; then
-    echo "Python 3.11 or newer is required." >&2
+if ! command -v curl >/dev/null 2>&1; then
+    echo "curl is required." >&2
     exit 1
 fi
 
-if ! "$python_command" -c 'import sys; raise SystemExit(sys.version_info < (3, 11))'; then
-    echo "Python 3.11 or newer is required." >&2
-    exit 1
-fi
-
-if ! command -v curl >/dev/null 2>&1 || ! command -v tar >/dev/null 2>&1; then
-    echo "curl and tar are required." >&2
-    exit 1
-fi
-
+asset="codex-meter-$platform-$architecture"
+base_url="${CODEX_METER_BASE_URL:-https://github.com/$repository/releases/download/$version}"
 temporary_dir="$(mktemp -d)"
 trap 'rm -rf "$temporary_dir"' EXIT HUP INT TERM
 
-archive="$temporary_dir/codex-meter.tar.gz"
-source_url="${CODEX_METER_SOURCE_URL:-https://github.com/$repository/archive/refs/tags/$version.tar.gz}"
-echo "Downloading codex-meter $version..."
-curl --fail --location --silent --show-error "$source_url" --output "$archive"
-tar -xzf "$archive" -C "$temporary_dir"
+echo "Downloading codex-meter $version for $platform/$architecture..."
+if [ -d "$base_url" ]; then
+    cp "$base_url/$asset" "$temporary_dir/$asset"
+    cp "$base_url/SHA256SUMS" "$temporary_dir/SHA256SUMS"
+else
+    curl --fail --location --silent --show-error "$base_url/$asset" --output "$temporary_dir/$asset"
+    curl --fail --location --silent --show-error "$base_url/SHA256SUMS" --output "$temporary_dir/SHA256SUMS"
+fi
 
-source_dir="$temporary_dir/codex-meter-${version#v}"
-if [ ! -d "$source_dir/codex_meter" ]; then
-    echo "Downloaded archive does not contain codex_meter." >&2
+expected="$(awk -v name="$asset" '$2 == name { print $1 }' "$temporary_dir/SHA256SUMS")"
+if [ -z "$expected" ]; then
+    echo "Release checksum does not contain $asset." >&2
+    exit 1
+fi
+if command -v sha256sum >/dev/null 2>&1; then
+    actual="$(sha256sum "$temporary_dir/$asset" | awk '{print $1}')"
+else
+    actual="$(shasum -a 256 "$temporary_dir/$asset" | awk '{print $1}')"
+fi
+if [ "$actual" != "$expected" ]; then
+    echo "Checksum verification failed for $asset." >&2
     exit 1
 fi
 
-stage="$temporary_dir/site"
-mkdir -p "$stage"
-cp -R "$source_dir/codex_meter" "$stage/codex_meter"
-
-mkdir -p "$install_root" "$bin_dir"
-rm -rf "$install_root/site.next"
-mv "$stage" "$install_root/site.next"
-rm -rf "$install_root/site"
-mv "$install_root/site.next" "$install_root/site"
-
-python_path="$(command -v "$python_command")"
-launcher="$temporary_dir/codex-meter"
-cat >"$launcher" <<EOF
-#!/bin/sh
-CODEX_METER_INSTALL_SITE='$install_root/site' exec '$python_path' -c 'import os, sys; sys.path.insert(0, os.environ["CODEX_METER_INSTALL_SITE"]); from codex_meter.cli import main; raise SystemExit(main())' "\$@"
-EOF
-chmod 0755 "$launcher"
-mv "$launcher" "$bin_dir/codex-meter"
+mkdir -p "$bin_dir"
+chmod 0755 "$temporary_dir/$asset"
+mv "$temporary_dir/$asset" "$bin_dir/codex-meter"
 
 "$bin_dir/codex-meter" --version
 echo "Installed to $bin_dir/codex-meter"

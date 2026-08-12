@@ -385,15 +385,24 @@ def initialize_tls_material(directory: Path) -> dict[str, Path]:
         _openssl(["x509", "-req", "-in", str(leaf_csr), "-CA", str(ca_cert), "-CAkey", str(ca_key), "-CAcreateserial", "-days", "30", "-sha256", "-extfile", str(extensions), "-out", str(leaf_cert)])
         for source, target in ((ca_cert, paths["ca_cert"]), (ca_key, paths["ca_key"]), (leaf_cert, paths["leaf_cert"]), (leaf_key, paths["leaf_key"])):
             os.replace(source, target)
-    paths["ca_key"].chmod(0o600)
-    paths["leaf_key"].chmod(0o600)
-    paths["ca_cert"].chmod(0o644)
-    paths["leaf_cert"].chmod(0o644)
+    try:
+        paths["ca_key"].chmod(0o600)
+        paths["leaf_key"].chmod(0o600)
+        paths["ca_cert"].chmod(0o644)
+        paths["leaf_cert"].chmod(0o644)
+    except OSError:
+        # Windows ACLs, rather than POSIX mode bits, control these files.
+        pass
     return paths
 
 
 def _openssl(arguments: list[str]) -> None:
-    result = subprocess.run(["openssl", *arguments], capture_output=True, text=True, check=False, timeout=30)
+    try:
+        result = subprocess.run(
+            ["openssl", *arguments], capture_output=True, text=True, check=False, timeout=30,
+        )
+    except OSError as error:
+        raise RuntimeError("openssl is required for explicit TLS diagnostics") from error
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or "openssl failed")
 

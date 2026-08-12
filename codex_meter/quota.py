@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
-import os
-import select
+import queue
 import subprocess
+import threading
 import time
 from dataclasses import dataclass
 from typing import Mapping, Sequence
@@ -41,6 +41,7 @@ def read_weekly_quotas(
 ) -> tuple[WeeklyQuota, ...]:
     """Ask the installed Codex App Server for current account quota metadata."""
 
+    reader: threading.Thread | None = None
     try:
         process = subprocess.Popen(
             list(command),
@@ -72,33 +73,43 @@ def read_weekly_quotas(
             )
         process.stdin.flush()
 
+        responses: queue.Queue[bytes | None] = queue.Queue()
+
+        def read_responses() -> None:
+            assert process.stdout is not None
+            try:
+                for line in iter(process.stdout.readline, b""):
+                    responses.put(line)
+            finally:
+                responses.put(None)
+
+        reader = threading.Thread(
+            target=read_responses,
+            name="codex-meter-quota-reader",
+            daemon=True,
+        )
+        reader.start()
         deadline = time.monotonic() + max(0.1, timeout)
-        buffered = b""
         while time.monotonic() < deadline:
             remaining = max(0.0, deadline - time.monotonic())
-            ready, _, _ = select.select([process.stdout], [], [], remaining)
-            if not ready:
+            try:
+                line = responses.get(timeout=remaining)
+            except queue.Empty:
                 break
-            chunk = os.read(process.stdout.fileno(), 65536)
-            if not chunk:
-                if process.poll() is not None:
-                    break
+            if line is None:
+                break
+            try:
+                message = json.loads(line)
+            except (json.JSONDecodeError, UnicodeDecodeError):
                 continue
-            buffered += chunk
-            while b"\n" in buffered:
-                line, buffered = buffered.split(b"\n", 1)
-                try:
-                    message = json.loads(line)
-                except (json.JSONDecodeError, UnicodeDecodeError):
-                    continue
-                if not isinstance(message, dict) or message.get("id") != 2:
-                    continue
-                if message.get("error") is not None:
-                    raise QuotaUnavailable("Codex App Server rejected the rate-limit request")
-                result = message.get("result")
-                if not isinstance(result, dict):
-                    raise QuotaUnavailable("Codex App Server returned an invalid rate-limit response")
-                return extract_weekly_quotas(result)
+            if not isinstance(message, dict) or message.get("id") != 2:
+                continue
+            if message.get("error") is not None:
+                raise QuotaUnavailable("Codex App Server rejected the rate-limit request")
+            result = message.get("result")
+            if not isinstance(result, dict):
+                raise QuotaUnavailable("Codex App Server returned an invalid rate-limit response")
+            return extract_weekly_quotas(result)
         raise QuotaUnavailable("timed out waiting for Codex rate limits")
     except (OSError, ValueError) as error:
         raise QuotaUnavailable(f"could not read Codex rate limits: {error}") from error
@@ -115,6 +126,8 @@ def read_weekly_quotas(
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait(timeout=1)
+        if reader is not None:
+            reader.join(timeout=1)
         if process.stdout is not None:
             process.stdout.close()
 
