@@ -4,6 +4,8 @@ __pycache__/
 .coverage
 dist/
 build/
+target/
+target-msrv/
 *.egg-info/
 .codex-meter/
 demo.cast

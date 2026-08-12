@@ -1,0 +1,47 @@
+[package]
+name = "codex-meter"
+version = "0.16.0-alpha.1"
+edition = "2024"
+rust-version = "1.85"
+description = "Local-first usage and performance observability for Codex"
+license = "MIT"
+repository = "https://github.com/DelicateNorman/codex-meter"
+
+[[bin]]
+name = "codex-meter"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0"
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+clap = { version = "4.5", features = ["derive"] }
+crossterm = "0.29"
+dirs = "6.0"
+flate2 = "1.1"
+libc = "0.2"
+regex = "1.11"
+rusqlite = { version = "0.37", features = ["bundled"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-pemfile = "2.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+tar = "0.4"
+tempfile = "3.20"
+toml = "0.9"
+unicode-width = "0.2"
+walkdir = "2.5"
+webpki-roots = "1.0"
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.1"
+
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 1
+# Keep unwinding so the interactive terminal guard can always restore raw mode.
+panic = "unwind"
+opt-level = "z"
