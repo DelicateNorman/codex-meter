@@ -1,0 +1,69 @@
+# Codex Meter macOS 桌面版
+
+Codex Meter Desktop 是给不想一直使用终端界面的用户准备的原生桌面应用。
+它不会替换 Codex CLI，也不会修改 Codex Desktop；桌面版读取的仍然是
+`codex-meter` 命令行版使用的同一套统计元数据。
+
+## 可以看到什么
+
+- 当前 Codex 与 Spark 的七日账号额度；
+- Token、API 等价费用、缓存效率、调用次数与会话数；
+- 今天、本周、本月和全部历史；
+- 按项目筛选，最近使用的项目排在前面；
+- 响应耗时、模型和推理强度明细；
+- 最近会话，以及本机与 SSH 远程源的增量刷新进度。
+
+第一次刷新会导入已有 Rollout 的统计元数据；以后只处理变化过的文件。
+某台远程服务器连接失败时，应用会提示具体原因，但已经刷新的本机统计仍然可看。
+
+## 数据与隐私
+
+桌面版和命令行版共用 `~/.codex-meter/meter.db`。安装、打开、升级或删除
+桌面应用都不会删除这个目录，所以原有 CLI 历史会自动出现在桌面版中。
+
+Codex Meter 只保留用量和时间等元数据，不保存 Prompt、回答、推理内容、
+Shell 命令、工具参数或输出、HTTP Header、Cookie、密钥或认证文件。
+远程服务器同样使用 CLI 已有的“只传统计元数据”SSH 过滤流程。
+
+## 怎么使用
+
+1. 从“应用程序”打开 **Codex Meter**。
+2. 在 Overview 顶部选择 Today、Week、Month 或 All time。
+3. Project 默认是 **All projects**，也可以切换到某一个项目。
+4. 点击右上角刷新按钮，导入本机和远程服务器的新统计。
+5. Sessions 查看最近会话；Settings 查看数据路径或管理 SSH 别名。
+
+周额度会并行加载，不受日期和项目筛选影响。如果额度不可用，先确认终端里
+`codex --version` 可以运行，再刷新。桌面版除了系统 PATH，还会安全查找
+Homebrew、`~/.local/bin`、Volta、FNM、npm-global 和 NVM 的常见位置。
+
+添加远程服务器之前，请先确认终端里 `ssh 别名` 能正常连接。然后在 Settings
+输入同一个别名并点击 **Add server**。第一次元数据同步可能较久，界面会显示
+进度；以后刷新是增量的。
+
+## 平台和预览构建
+
+当前主要支持 macOS 12 及以上版本，同时构建 Apple Silicon 和 Intel 两种架构。
+[macOS 桌面版工作流](https://github.com/DelicateNorman/codex-meter/actions/workflows/desktop.yml)
+会真实生成并校验两种 `.app` 和 `.dmg`。目前 CI 产物属于未签名的开发预览版；
+面向普通用户公开发布前，应配置 Apple Developer ID 签名和公证。
+
+## 从源码运行
+
+安装当前 Node.js LTS 和稳定版 Rust，然后运行：
+
+```bash
+git clone https://github.com/DelicateNorman/codex-meter.git
+cd codex-meter/desktop
+npm ci
+npm run tauri dev
+```
+
+构建 release 应用和 DMG：
+
+```bash
+npm run tauri build
+```
+
+产物位于 `desktop/src-tauri/target/release/bundle/`。构建过程不需要移动或修改
+`~/.codex-meter`。

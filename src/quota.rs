@@ -18,7 +18,8 @@ use std::time::{Duration, Instant};
 pub const WEEK_MINUTES: i64 = 7 * 24 * 60;
 const WEEK_TOLERANCE_MINUTES: i64 = 12 * 60;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WeeklyQuota {
     pub limit_id: String,
     pub name: String,

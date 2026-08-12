@@ -22,6 +22,7 @@
 <p align="center">
   <a href="docs/user-guide.en.md">English user guide</a> ·
   <a href="docs/user-guide.zh-CN.md">中文使用指南</a> ·
+  <a href="docs/desktop.en.md">macOS desktop preview</a> ·
   <a href="docs/build-from-source.md">Build from source</a> ·
   <a href="CHANGELOG.md">Changelog</a>
 </p>
@@ -43,6 +44,25 @@ It is a separate companion application. It does **not** replace or patch the off
 ![Codex Meter interactive dashboard showing weekly account limits, token ratios, model usage, and project navigation](docs/assets/dashboard.png)
 
 The dashboard opens immediately. Live account limits load in the background and replace the loading row automatically when Codex responds.
+
+## macOS desktop app (preview)
+
+Codex Meter now also has a native macOS desktop interface. It uses the system
+WebView through Tauri instead of bundling a browser, and the production DMG is
+about 6 MB. The app and CLI share the same Rust collector, privacy filters,
+pricing catalog, SSH metadata synchronizer, and `~/.codex-meter` database, so
+opening either one preserves the same history.
+
+The desktop overview includes live weekly limits, Today/Week/Month/All time,
+project filtering, response health, models, recent sessions, refresh progress,
+and remote-server management. Apple Silicon and Intel `.app`/`.dmg` bundles are
+built and validated on real macOS GitHub runners.
+
+Preview CI artifacts are currently unsigned and intended for project testing.
+A normal public download will follow after Developer ID signing and Apple
+notarization are configured. See the [English desktop guide](docs/desktop.en.md)
+or [中文桌面版指南](docs/desktop.zh-CN.md) for usage, privacy, and source-build
+instructions. The terminal application remains fully supported and unchanged.
 
 ## Why Codex Meter?
 

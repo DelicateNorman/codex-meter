@@ -6,6 +6,7 @@ dist/
 build/
 target/
 target-msrv/
+node_modules/
 *.egg-info/
 .codex-meter/
 demo.cast

@@ -1,0 +1,94 @@
+name: macOS desktop
+
+on:
+  push:
+    branches: [main, desktop-macos]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "src/**"
+      - "desktop/**"
+      - ".github/workflows/desktop.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "src/**"
+      - "desktop/**"
+      - ".github/workflows/desktop.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Desktop frontend
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  macos-bundle:
+    name: ${{ matrix.label }} app + DMG
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            label: Apple Silicon
+            artifact: codex-meter-desktop-macos-arm64
+          - os: macos-15-intel
+            label: Intel
+            artifact: codex-meter-desktop-macos-x86_64
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+      - name: Install frontend dependencies
+        working-directory: desktop
+        run: npm ci
+      - name: Build frontend for Tauri macros
+        working-directory: desktop
+        run: npm run build
+      - name: Check desktop Rust bridge
+        run: cargo clippy --manifest-path desktop/src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+      - name: Build native app and DMG
+        working-directory: desktop
+        run: npm run tauri -- build --bundles app,dmg
+      - name: Validate macOS bundle
+        shell: bash
+        run: |
+          set -eu
+          app="desktop/src-tauri/target/release/bundle/macos/Codex Meter.app"
+          test -x "$app/Contents/MacOS/codex-meter-desktop"
+          test -f "$app/Contents/Info.plist"
+          test -f desktop/src-tauri/target/release/bundle/dmg/*.dmg
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$app/Contents/Info.plist" | grep -F "com.delicatenorman.codexmeter"
+          file "$app/Contents/MacOS/codex-meter-desktop"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            desktop/src-tauri/target/release/bundle/macos/*.app
+            desktop/src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: error

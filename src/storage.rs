@@ -69,7 +69,8 @@ impl SourceMetadata {
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct ImportStats(pub usize, pub usize, pub usize);
 
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Overview {
     pub calls: i64,
     pub sessions: i64,
@@ -86,7 +87,8 @@ pub struct Overview {
     pub avg_e2e_ms: Option<f64>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ModelUsage {
     pub model: String,
     pub effort: String,
@@ -100,7 +102,8 @@ pub struct ModelUsage {
     pub unpriced_calls: i64,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SessionSummary {
     pub codex_thread_id: String,
     pub project_name: Option<String>,
@@ -114,7 +117,8 @@ pub struct SessionSummary {
     pub input_tokens: i64,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HistoryBucket {
     pub period_start: String,
     pub calls: i64,
@@ -127,7 +131,8 @@ pub struct HistoryBucket {
     pub cost_usd: Option<f64>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectUsage {
     pub project: String,
     pub sessions: i64,
