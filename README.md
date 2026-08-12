@@ -1,6 +1,6 @@
 # Codex Meter
 
-Codex Meter is a local-first usage and performance observability CLI for Codex. Version 0.12 adds a global project selector to the keyboard-driven interactive home screen, imports rollout JSONL, receives Codex OTLP/HTTP JSON in real time, adapts App Server JSON-RPC, analyzes latency/cache/retries/compaction, provides daily/weekly/monthly/all-time reporting, and offers content-free network diagnostics and explicitly enabled local proxy modes.
+Codex Meter is a local-first usage and performance observability CLI for Codex. Version 0.13 adds live account weekly-limit display to the keyboard-driven interactive home screen, alongside the global project selector, rollout import, daily/weekly/monthly/all-time reporting, latency/cache/retry/compaction analysis, and content-free network diagnostics.
 
 It never imports prompts, model responses, reasoning content, shell commands, tool output, headers, cookies, or credentials.
 
@@ -13,7 +13,7 @@ The first public release officially supports **Linux** with Python 3.11 or newer
 Install the latest stable release for the current user without `sudo`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.12.4/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.13.0/install.sh | sh
 ```
 
 Then run:
@@ -24,7 +24,7 @@ codex-meter
 
 The installer places the program under `~/.local/share/codex-meter` and the command under `~/.local/bin`. It does not modify the official `codex` command or delete existing data in `~/.codex-meter`. You can [read the installer](install.sh) before running it.
 
-Stable versions and source archives are published on the [Releases page](https://github.com/DelicateNorman/codex-meter/releases). The command above is pinned to the tested `v0.12.4` release so that installation is reproducible.
+Stable versions and source archives are published on the [Releases page](https://github.com/DelicateNorman/codex-meter/releases). The command above is pinned to the tested `v0.13.0` release so that installation is reproducible.
 
 ## Build from source
 
@@ -51,7 +51,9 @@ codex-meter summary --period month --project my-project
 codex-meter doctor
 ```
 
-Running `codex-meter` without a subcommand imports changed rollout files and opens an interactive dashboard. The menu sits below the report: use any arrow key to choose a view, then Enter or Space to open it. The default scope is `All projects`; open `Project` (or `/project`) to choose one imported project, and Today, Week, Month, All time, history, and Network will all use that project until the dashboard exits. The Network view shows first-token latency, end-to-end time, and exact or clearly marked estimated output-token speed. Press `/` to open a focused command palette with short descriptions; Up/Down moves through the commands and automatically changes pages, Enter runs the selected command, and Esc closes the palette. While the palette is open all printable keys, including `q`, are command text. Back on the main screen, `r` refreshes with visible progress and `q` quits. If no usage is found, the dashboard explains how to create and refresh local data. Narrow terminals use compact navigation instead of overflowing, while short terminals keep the most important summary visible. When output is redirected instead of attached to a terminal, the command prints today's overview for compatibility.
+Running `codex-meter` without a subcommand imports changed rollout files and opens an interactive dashboard. The overview shows each seven-day account limit reported by Codex, including used percentage, remaining percentage, and reset time in the machine's local timezone. These limits belong to the active Codex account and do not change when a project or reporting period is selected; the `Week` view below them is the separate local usage total for the current calendar week. Press `r` to refresh both local records and the live limits.
+
+The menu sits below the report: use any arrow key to choose a view, then Enter or Space to open it. The default scope is `All projects`; open `Project` (or `/project`) to choose one imported project, and Today, Week, Month, All time, history, and Network will all use that project until the dashboard exits. The Network view shows first-token latency, end-to-end time, and exact or clearly marked estimated output-token speed. Press `/` to open a focused command palette with short descriptions; Up/Down moves through the commands and automatically changes pages, Enter runs the selected command, and Esc closes the palette. While the palette is open all printable keys, including `q`, are command text. Back on the main screen, `r` refreshes with visible progress and `q` quits. If no usage is found, the dashboard explains how to create and refresh local data. Narrow terminals use compact navigation instead of overflowing, while short terminals keep the most important summary visible. When output is redirected instead of attached to a terminal, the command prints today's overview for compatibility.
 
 Project names are derived from the final directory name in each Rollout working directory. Projects with the same final directory name are intentionally grouped together, and recently used projects appear first. Start typing in the Project selector to filter long lists; Unicode names and spaces are supported, Backspace edits the filter, and Esc cancels. The selector resets to `All projects` whenever a new dashboard session starts.
 
@@ -133,6 +135,7 @@ codex_meter/
 ├── data/
 │   └── pricing.json          versioned price catalog
 ├── pricing.py                provider-aware cost calculator
+├── quota.py                  current account weekly-limit reader
 ├── storage.py                WAL persistence and aggregates
 ├── tui.py                    dark-blue overview/models rendering
 ├── interactive.py            keyboard navigation and slash commands
@@ -238,6 +241,7 @@ The calculator separates regular input, cached reads, cache writes, and output. 
 | Shell/patch/MCP/web timing | paired rollout events | exact/derived |
 | TTFM, inference/overhead, TBT/TPS | OTLP JSON | exact/OTLP bucket approximation |
 | Exact response usage/waterfall | App Server raw response + lifecycle | exact when enabled |
+| Account weekly limits and reset time | App Server `account/rateLimits/read` | live backend value |
 | Network/TLS setup | socket probe / passive metadata / local proxy | exact at selected layer |
 | Prompt/response content | intentionally excluded | never stored |
 
@@ -301,7 +305,7 @@ The exact 0.146.1 source/schema audit is recorded in [`docs/codex-0.146.1-schema
 python3 -m unittest discover -v
 ```
 
-Tests cover cumulative-event duplication, fork/replay reconciliation, exact raw-response precedence, daily/weekly/monthly period boundaries, OS-user isolation, opt-in account labels, OTLP parsing/HTTP ingestion, App Server lifecycle usage, cache pricing, latency percentiles, tcpdump metadata parsing, CONNECT tunnels, HTTP/SSE and WebSocket reverse proxying, TLS termination/re-encryption, idempotent storage, privacy, and `N/A` rendering.
+Tests cover cumulative-event duplication, fork/replay reconciliation, exact raw-response precedence, weekly-limit extraction and rendering, daily/weekly/monthly period boundaries, OS-user isolation, opt-in account labels, OTLP parsing/HTTP ingestion, App Server lifecycle usage, cache pricing, latency percentiles, tcpdump metadata parsing, CONNECT tunnels, HTTP/SSE and WebSocket reverse proxying, TLS termination/re-encryption, idempotent storage, privacy, and `N/A` rendering.
 
 ## Remaining work toward 1.0
 

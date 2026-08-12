@@ -19,6 +19,7 @@ from .config import initialize_home, load_identity, update_account_identity
 from .doctor import run_doctor
 from .interactive import run_interactive
 from .pricing import PricingCatalog
+from .quota import QuotaUnavailable, WeeklyQuota, read_weekly_quotas
 from .network import TunnelProxyServer, capture_metadata, probe_endpoint
 from .proxy import ReverseProxyServer, initialize_tls_material, wrap_server_tls
 from .storage import Storage
@@ -400,6 +401,21 @@ def _history(
 
 
 def _interactive_dashboard(storage: Storage, catalog: PricingCatalog, *, color: bool) -> int:
+    weekly_quotas: tuple[WeeklyQuota, ...] = ()
+    quota_message: str | None = None
+
+    def refresh_quota() -> None:
+        nonlocal weekly_quotas, quota_message
+        try:
+            weekly_quotas = read_weekly_quotas()
+        except QuotaUnavailable:
+            weekly_quotas = ()
+            quota_message = "WEEKLY LIMIT  Unavailable · press r to retry"
+        else:
+            quota_message = None
+
+    refresh_quota()
+
     def content(
         view: str,
         width: int,
@@ -447,10 +463,13 @@ def _interactive_dashboard(storage: Storage, catalog: PricingCatalog, *, color: 
             period=label,
             color=use_color,
             width=width,
+            weekly_quotas=weekly_quotas,
+            quota_message=quota_message,
         )
 
     def refresh() -> None:
         result = _import(storage, catalog, _codex_home() / "sessions", force=False, quiet=True)
+        refresh_quota()
         if result:
             raise OSError("one or more rollout files could not be imported")
 

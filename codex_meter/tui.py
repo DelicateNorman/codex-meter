@@ -6,7 +6,10 @@ import os
 import shutil
 import sys
 import unicodedata
+from datetime import datetime
 from typing import Mapping, Sequence
+
+from .quota import WeeklyQuota
 
 
 RESET = "\x1b[0m"
@@ -27,6 +30,8 @@ def render_overview(
     period: str,
     color: bool | None = None,
     width: int | None = None,
+    weekly_quotas: Sequence[WeeklyQuota] | None = None,
+    quota_message: str | None = None,
 ) -> str:
     color = _supports_color() if color is None else color
     width = max(80, min(width or shutil.get_terminal_size((110, 30)).columns, 132))
@@ -86,6 +91,17 @@ def render_overview(
         f"Avg E2E {_duration(overview.get('avg_e2e_ms'))}"
     )
     lines.append(frame(latency, MUTED, True))
+    if weekly_quotas is not None:
+        if weekly_quotas:
+            for quota in weekly_quotas:
+                style = GREEN if quota.remaining_percent > 25 else YELLOW
+                lines.append(frame(_weekly_quota_line(quota), style, True))
+        else:
+            lines.append(frame(
+                quota_message or "WEEKLY LIMIT  No seven-day quota was provided for this account",
+                YELLOW,
+                True,
+            ))
     if unpriced:
         lines.append(frame(f"△ {unpriced} call(s) have unknown pricing; cost excludes them", YELLOW, True))
 
@@ -291,6 +307,24 @@ def _bar_line(label: str, value: int, maximum: int, width: int) -> str:
     ratio = min(1.0, value / maximum) if maximum else 0
     filled = round(width * ratio)
     return f"{label:<10} {'█' * filled}{'░' * (width - filled)}  {_tokens(value):>9}  {ratio * 100:5.1f}%"
+
+
+def _weekly_quota_line(quota: WeeklyQuota) -> str:
+    reset = _reset_time(quota.resets_at)
+    name = _fit_display(quota.name, 20)
+    return (
+        f"WEEKLY LIMIT  {name} · {quota.used_percent}% used · "
+        f"{quota.remaining_percent}% left · reset {reset}"
+    )
+
+
+def _reset_time(timestamp: int | None) -> str:
+    if timestamp is None:
+        return "unknown"
+    try:
+        return datetime.fromtimestamp(timestamp).astimezone().strftime("%b %d %H:%M")
+    except (OSError, OverflowError, ValueError):
+        return "unknown"
 
 
 def _tokens(value: int) -> str:

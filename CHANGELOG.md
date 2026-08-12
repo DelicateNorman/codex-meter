@@ -2,6 +2,13 @@
 
 All notable changes to Codex Meter are documented here.
 
+## [0.13.0] - 2026-08-12
+
+- Show live account weekly limits, used/remaining percentages, and local reset times in the interactive overview.
+- Keep account limits independent from local day/week/month/project filters.
+- Display separate backend quota buckets, including named model-specific limits, without reading or storing credentials.
+- Refresh quota snapshots together with local rollout history and fail gracefully when Codex does not provide them.
+
 ## [0.12.4] - 2026-08-12
 
 - Show refresh progress before scanning local Codex records and confirm completion afterward.
@@ -59,6 +66,7 @@ First public Linux release.
 - Versioned API-equivalent pricing with unknown prices shown as `N/A`.
 - One-line, no-sudo Linux installer.
 
+[0.13.0]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.13.0
 [0.12.4]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.12.4
 [0.12.3]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.12.3
 [0.12.2]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.12.2

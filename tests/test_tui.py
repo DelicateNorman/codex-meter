@@ -16,9 +16,35 @@ from codex_meter.interactive import (
 )
 from codex_meter.tui import _display_width as tui_display_width
 from codex_meter.tui import render_history, render_network, render_overview
+from codex_meter.quota import WeeklyQuota
 
 
 class TuiTests(unittest.TestCase):
+    def test_dashboard_shows_account_weekly_quota_and_reset(self) -> None:
+        rendered = render_overview(
+            {},
+            [],
+            period="TODAY",
+            color=False,
+            width=100,
+            weekly_quotas=(
+                WeeklyQuota("codex", "Codex", 15, 1787024540, 10080, "pro"),
+                WeeklyQuota("spark", "Codex Spark", 0, 1787129518, 10080, "pro"),
+            ),
+        )
+        self.assertIn("WEEKLY LIMIT  Codex", rendered)
+        self.assertIn("15% used · 85% left", rendered)
+        self.assertIn("WEEKLY LIMIT  Codex Spark", rendered)
+        self.assertIn("reset", rendered)
+        self.assertTrue(all(tui_display_width(line) <= 100 for line in rendered.splitlines()))
+
+    def test_dashboard_explains_when_weekly_quota_is_unavailable(self) -> None:
+        rendered = render_overview(
+            {}, [], period="TODAY", color=False, width=80,
+            weekly_quotas=(), quota_message="WEEKLY LIMIT  Unavailable · press r to retry",
+        )
+        self.assertIn("WEEKLY LIMIT  Unavailable · press r to retry", rendered)
+
     def test_empty_dashboard_uses_na_not_invented_metrics(self) -> None:
         rendered = render_overview({}, [], period="TEST", color=False, width=90)
         self.assertIn("API-EQUIV", rendered)
