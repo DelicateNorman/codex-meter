@@ -13,6 +13,7 @@ mod models;
 mod network;
 mod otlp;
 mod pricing;
+mod process_command;
 mod proxy;
 mod quota;
 mod remote;

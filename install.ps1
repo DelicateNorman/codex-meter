@@ -12,6 +12,14 @@ $asset = "codex-meter-windows-x86_64.exe"
 $destination = Join-Path $BinDir "codex-meter.exe"
 $previous = "$destination.previous"
 
+function Add-PathFirst([string]$PathValue, [string]$Entry) {
+    $normalizedEntry = $Entry.Trim().TrimEnd([char[]]"\/")
+    $remaining = @($PathValue -split ";" | Where-Object {
+        $_ -and $_.Trim().TrimEnd([char[]]"\/") -ine $normalizedEntry
+    })
+    return (@($Entry) + $remaining) -join ";"
+}
+
 if ($Rollback) {
     if (-not (Test-Path $previous -PathType Leaf)) {
         throw "No previous codex-meter installation is available to restore."
@@ -100,15 +108,8 @@ try {
     }
 
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    if (-not $userPath) { $userPath = "" }
-    $pathParts = @($userPath -split ";" | Where-Object { $_ })
-    if ($pathParts -notcontains $BinDir) {
-        $newUserPath = if ($userPath) { "$userPath;$BinDir" } else { $BinDir }
-        [Environment]::SetEnvironmentVariable("Path", $newUserPath, "User")
-    }
-    if (($env:Path -split ";") -notcontains $BinDir) {
-        $env:Path = "$BinDir;$env:Path"
-    }
+    [Environment]::SetEnvironmentVariable("Path", (Add-PathFirst $userPath $BinDir), "User")
+    $env:Path = Add-PathFirst $env:Path $BinDir
 
     Write-Host "Installed to $destination"
     if ($hadPrevious) {

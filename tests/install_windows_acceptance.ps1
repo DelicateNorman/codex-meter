@@ -11,12 +11,20 @@ $binDir = Join-Path $testRoot "bin"
 $historyHome = Join-Path $testRoot "history"
 $sessions = Join-Path $testRoot "sessions"
 $osHome = Join-Path $testRoot "os-home"
+$legacyBin = Join-Path $testRoot "legacy-python-scripts"
 $installer = [scriptblock]::Create((Get-Content -Raw (Join-Path $repositoryRoot "install.ps1")))
+$originalUserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+$originalProcessPath = $env:Path
 
 try {
-    New-Item -ItemType Directory -Force -Path $binDir, $osHome | Out-Null
+    New-Item -ItemType Directory -Force -Path $binDir, $osHome, $legacyBin | Out-Null
     $destination = Join-Path $binDir "codex-meter.exe"
     Copy-Item $OldBinary $destination
+    Copy-Item $OldBinary (Join-Path $legacyBin "codex-meter.exe")
+    $env:Path = "$legacyBin;$binDir;$originalProcessPath"
+    [Environment]::SetEnvironmentVariable(
+        "Path", "$legacyBin;$binDir;$originalUserPath", "User"
+    )
 
     python (Join-Path $repositoryRoot "tests/release_history_guard.py") seed `
         --binary $destination --home $historyHome --sessions $sessions
@@ -27,6 +35,12 @@ try {
     $newHash = (Get-FileHash -Algorithm SHA256 (Join-Path $AssetDir $AssetName)).Hash
     $env:CODEX_METER_HOME = $historyHome
     & $installer -BaseUrl $AssetDir -BinDir $binDir
+    $resolved = (Get-Command codex-meter -CommandType Application).Source
+    if ($resolved -ne $destination) { throw "installer did not put the Rust binary first on PATH: $resolved" }
+    if (($env:Path -split ";")[0] -ne $binDir) { throw "process PATH does not start with install directory" }
+    if (([Environment]::GetEnvironmentVariable("Path", "User") -split ";")[0] -ne $binDir) {
+        throw "user PATH does not start with install directory"
+    }
     if ((Get-FileHash -Algorithm SHA256 $destination).Hash -ne $newHash) { throw "new binary hash mismatch" }
     if ((Get-FileHash -Algorithm SHA256 "$destination.previous").Hash -ne $oldHash) { throw "backup hash mismatch" }
     python (Join-Path $repositoryRoot "tests/release_history_guard.py") manifest `
@@ -67,5 +81,7 @@ try {
 }
 finally {
     Remove-Item Env:CODEX_METER_HOME -ErrorAction SilentlyContinue
+    $env:Path = $originalProcessPath
+    [Environment]::SetEnvironmentVariable("Path", $originalUserPath, "User")
     if (Test-Path $testRoot) { Remove-Item -Recurse -Force $testRoot }
 }

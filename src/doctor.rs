@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::thread;
 use std::time::{Duration, Instant};
 use walkdir::WalkDir;
@@ -196,7 +196,7 @@ fn executable_detail(program: &str) -> String {
 }
 
 fn command_output(program: &str, arguments: &[&str], timeout: Duration) -> Option<String> {
-    let mut child = Command::new(program)
+    let mut child = crate::process_command::command(program)
         .args(arguments)
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -258,7 +258,7 @@ fn str_value(value: &serde_json::Value) -> Option<&str> {
 }
 
 fn command_success(program: &str, arguments: &[&str], timeout: Duration) -> bool {
-    let Ok(mut child) = Command::new(program)
+    let Ok(mut child) = crate::process_command::command(program)
         .args(arguments)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -281,15 +281,7 @@ fn command_success(program: &str, arguments: &[&str], timeout: Duration) -> bool
 }
 
 fn find_command(program: &str) -> Option<PathBuf> {
-    let file = if cfg!(windows) {
-        format!("{program}.exe")
-    } else {
-        program.to_owned()
-    };
-    let paths = std::env::var_os("PATH")?;
-    std::env::split_paths(&paths)
-        .map(|directory| directory.join(&file))
-        .find(|path| path.is_file())
+    crate::process_command::resolve(program)
 }
 
 #[cfg(test)]

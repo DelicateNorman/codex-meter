@@ -6,7 +6,7 @@ use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -565,11 +565,12 @@ pub fn proxy_stdio(
     command: &[String],
     sink: Arc<Mutex<dyn FnMut(LiveEvent) + Send>>,
 ) -> Result<i32> {
-    let mut child = Command::new(command.first().context("empty App Server command")?)
-        .args(&command[1..])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()?;
+    let mut child =
+        crate::process_command::command(command.first().context("empty App Server command")?)
+            .args(&command[1..])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()?;
     let mut child_input = child.stdin.take().unwrap();
     let child_output = child.stdout.take().unwrap();
     let sink_input = Arc::clone(&sink);

@@ -8,8 +8,9 @@ use serde_json::{Map, Value, json};
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fmt;
+use std::io::ErrorKind;
 use std::io::{BufRead, BufReader, Write};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -71,13 +72,22 @@ pub fn read_weekly_quotas(
     let Some((program, arguments)) = command.split_first() else {
         return Err(QuotaUnavailable("quota command is empty".into()));
     };
-    let mut child = Command::new(program)
+    let mut child = crate::process_command::command(program)
         .args(arguments)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|error| QuotaUnavailable(format!("could not start Codex App Server: {error}")))?;
+        .map_err(|error| {
+            if error.kind() == ErrorKind::NotFound {
+                QuotaUnavailable(
+                    "Codex CLI was not found on PATH; run `codex --version` in this terminal"
+                        .into(),
+                )
+            } else {
+                QuotaUnavailable(format!("could not start Codex App Server: {error}"))
+            }
+        })?;
 
     let result = (|| {
         let mut stdin = child.stdin.take().ok_or_else(|| {
@@ -396,5 +406,36 @@ printf '%s\n' '{"id":2,"result":{"rateLimits":{"limitId":"codex","primary":{"use
             receiver.recv_timeout(Duration::from_secs(1)).unwrap(),
             QuotaUpdate::Loaded(_)
         ));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn reads_quota_through_a_windows_cmd_shim() {
+        let directory = tempfile::tempdir().unwrap();
+        let responder = directory.path().join("quota_responder.py");
+        std::fs::write(
+            &responder,
+            r#"import json
+import sys
+for _ in range(3):
+    sys.stdin.readline()
+print(json.dumps({"id": 2, "result": {"rateLimits": {"limitId": "codex", "primary": {"windowDurationMins": 10080, "usedPercent": 37}}}}), flush=True)
+"#,
+        )
+        .unwrap();
+        let shim = directory.path().join("codex.cmd");
+        std::fs::write(
+            &shim,
+            format!("@echo off\r\npython \"{}\" %*\r\n", responder.display()),
+        )
+        .unwrap();
+        let command = vec![
+            shim.into_os_string(),
+            OsString::from("app-server"),
+            OsString::from("--stdio"),
+        ];
+        let quotas = read_weekly_quotas(&command, Duration::from_secs(5)).unwrap();
+        assert_eq!(quotas.len(), 1);
+        assert_eq!(quotas[0].used_percent, 37);
     }
 }
