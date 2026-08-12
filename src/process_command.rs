@@ -1,9 +1,8 @@
 //! Cross-platform command resolution.
 //!
-//! `std::process::Command` automatically tries an omitted `.exe` suffix on
-//! Windows, but npm-installed commands are commonly exposed as `.cmd` shims.
-//! Resolve every PATHEXT entry first so `codex` works the same way it does in
-//! PowerShell and cmd.exe.
+//! Windows npm commands are commonly `.cmd` shims, while macOS applications
+//! launched from Finder receive a much smaller PATH than an interactive shell.
+//! Resolve both cases without starting a shell or interpolating user input.
 
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
@@ -11,7 +10,6 @@ use std::process::Command;
 
 pub fn command(program: impl AsRef<OsStr>) -> Command {
     let program = program.as_ref();
-    #[cfg(windows)]
     if let Some(path) = resolve(program) {
         return Command::new(path);
     }
@@ -24,8 +22,25 @@ pub fn resolve(program: impl AsRef<OsStr>) -> Option<PathBuf> {
     if path.is_absolute() || path.components().count() > 1 {
         return resolve_candidate(path);
     }
-    let paths = std::env::var_os("PATH")?;
-    std::env::split_paths(&paths).find_map(|directory| resolve_candidate(&directory.join(path)))
+    if let Some(paths) = std::env::var_os("PATH") {
+        if let Some(resolved) = resolve_in_directories(path, std::env::split_paths(&paths)) {
+            return Some(resolved);
+        }
+    }
+    #[cfg(target_os = "macos")]
+    if let Some(resolved) = resolve_in_directories(path, macos_fallback_directories()) {
+        return Some(resolved);
+    }
+    None
+}
+
+fn resolve_in_directories(
+    program: &Path,
+    directories: impl IntoIterator<Item = PathBuf>,
+) -> Option<PathBuf> {
+    directories
+        .into_iter()
+        .find_map(|directory| resolve_candidate(&directory.join(program)))
 }
 
 fn resolve_candidate(path: &Path) -> Option<PathBuf> {
@@ -44,6 +59,35 @@ fn resolve_candidate(path: &Path) -> Option<PathBuf> {
         }
     }
     None
+}
+
+#[cfg(target_os = "macos")]
+fn macos_fallback_directories() -> Vec<PathBuf> {
+    let mut directories = Vec::new();
+    if let Some(home) = dirs::home_dir() {
+        directories.extend([
+            home.join(".local/bin"),
+            home.join(".volta/bin"),
+            home.join(".fnm/aliases/default/bin"),
+            home.join(".npm-global/bin"),
+        ]);
+        let nvm_versions = home.join(".nvm/versions/node");
+        if let Ok(entries) = std::fs::read_dir(nvm_versions) {
+            let mut nvm_bins = entries
+                .filter_map(Result::ok)
+                .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+                .map(|entry| entry.path().join("bin"))
+                .collect::<Vec<_>>();
+            nvm_bins.sort_by(|left, right| right.cmp(left));
+            directories.extend(nvm_bins);
+        }
+    }
+    directories.extend([
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/usr/local/bin"),
+        PathBuf::from("/opt/local/bin"),
+    ]);
+    directories
 }
 
 #[cfg(windows)]
@@ -71,6 +115,25 @@ mod tests {
         let path = directory.path().join("meter-command");
         std::fs::write(&path, b"test").unwrap();
         assert_eq!(resolve(&path), Some(path));
+    }
+
+    #[test]
+    fn directory_resolution_preserves_search_order() {
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        let program = if cfg!(windows) {
+            Path::new("meter-command.cmd")
+        } else {
+            Path::new("meter-command")
+        };
+        let first_path = first.path().join(program);
+        let second_path = second.path().join(program);
+        std::fs::write(&first_path, b"first").unwrap();
+        std::fs::write(&second_path, b"second").unwrap();
+        assert_eq!(
+            resolve_in_directories(program, [first.path().into(), second.path().into()]),
+            Some(first_path)
+        );
     }
 
     #[cfg(windows)]
