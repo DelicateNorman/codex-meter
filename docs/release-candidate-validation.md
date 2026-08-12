@@ -2,7 +2,7 @@
 
 Validation date: 2026-08-12  
 Candidate branch: `main`
-Current beta commit: `c944bd5e07a3637ed0dea013f4e3418ebb621b69`
+Current beta commit: `81a0292ae56a475f3920b34bff4459be8c4c58ed`
 
 ## Outcome
 
@@ -25,6 +25,12 @@ in [v0.16.0-beta.2](https://github.com/DelicateNorman/codex-meter/releases/tag/v
 Its [tagged release run](https://github.com/DelicateNorman/codex-meter/actions/runs/31612267447)
 passed the complete four-platform build, native-terminal, installation,
 checksum, history-preservation, rollback, publication, and public-URL matrix.
+
+Remote-sync progress and remote-side metadata filtering were added in
+[v0.16.0-beta.3](https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.0-beta.3).
+Its [tagged release run](https://github.com/DelicateNorman/codex-meter/actions/runs/31615733928)
+passed the same complete matrix for all four platforms, including installation
+from the final public download URLs.
 
 ## Per-platform release rehearsal
 
@@ -74,6 +80,16 @@ the source preserved the imported statistics. No raw Rollout file was written to
 the local Meter home. The exact temporary remote file and its test directory were
 removed after verification.
 
+Beta.3 additionally runs an allowlist filter on the SSH host when Python 3 is
+available. Prompts, responses, reasoning text, commands, tool output, headers,
+and secrets are excluded before transmission. An end-to-end fake-SSH test
+confirms that content canaries never enter the local database or WAL and that a
+repeat sync skips unchanged sources. A 60-file live development dataset was
+also compared through the full parser and filtered path: more than 21,000 CSV
+rows matched exactly, while 678.1 MiB of raw Rollouts produced a 2,273,557-byte
+compressed metadata stream (about 99.7% smaller). The same test verifies file,
+byte, and percentage progress callbacks from start through completion.
+
 ## Live history preservation
 
 The public beta.1 was installed and rolled back in an isolated bin directory
@@ -81,12 +97,17 @@ while `CODEX_METER_HOME` pointed to the development user's real
 `~/.codex-meter`. SHA-256 hashes for every file under that directory matched
 exactly before installation, after upgrade, and after rollback. The installed
 candidate hash matched the public Linux asset. The real
-`~/.local/bin/codex-meter` was not replaced and remains v0.14.2.
+`~/.local/bin/codex-meter` was not replaced during that specific check.
 
 Beta.2 repeated the same exact-manifest preservation check on all four release
 runners using seeded v0.15 histories. A development-host check against the live
 home was deliberately not forced while existing `codex-meter` processes were
 active; the hotfix changes only terminal row separators and no storage path.
+
+Beta.3 again passed exact-manifest history preservation during install,
+upgrade, checksum rejection, and rollback on every release runner. Its remote
+filter parity benchmark used isolated Meter homes and did not modify the live
+history.
 
 ## Remaining stable-release checks
 
