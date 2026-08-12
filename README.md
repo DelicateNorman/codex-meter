@@ -83,7 +83,7 @@ codex-meter
 
 No `sudo`, Administrator access, or Python installation is required. Linux and macOS install to `~/.local/bin`; Windows installs to `%LOCALAPPDATA%\Programs\CodexMeter\bin` and adds it to the current user's `PATH`.
 
-Prebuilt binaries, wheels, checksums, and source archives are available on the [Releases page](https://github.com/DelicateNorman/codex-meter/releases).
+Prebuilt binaries, checksums, and source archives are available on the [Releases page](https://github.com/DelicateNorman/codex-meter/releases).
 
 ## Use the interactive dashboard
 

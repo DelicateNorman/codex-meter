@@ -2,7 +2,7 @@ name: Rust rewrite
 
 on:
   push:
-    branches: [rust-rewrite]
+    branches: [main, rust-rewrite]
   pull_request:
   workflow_dispatch:
 

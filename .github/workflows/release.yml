@@ -18,116 +18,105 @@ jobs:
         include:
           - os: ubuntu-24.04
             asset: codex-meter-linux-x86_64
-            pyinstaller_args: --strip
-          - os: windows-2025
-            asset: codex-meter-windows-x86_64.exe
-            pyinstaller_args: ""
           - os: macos-15
             asset: codex-meter-macos-arm64
-            pyinstaller_args: --strip
           - os: macos-15-intel
             asset: codex-meter-macos-x86_64
-            pyinstaller_args: --strip
+          - os: windows-2025
+            asset: codex-meter-windows-x86_64.exe
     steps:
       - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
-      - run: python -m pip install . "pyinstaller>=6.11,<7"
-      - run: pyinstaller --noconfirm --clean --onefile --optimize 2 ${{ matrix.pyinstaller_args }} --name codex-meter --collect-data codex_meter --collect-submodules email --hidden-import email.quoprimime --hidden-import email.base64mime packaging/codex_meter_entry.py
-      - name: Name and verify executable
+      - run: cargo build --release --locked
+      - name: Stage executable
+        shell: bash
+        run: |
+          set -eu
+          mkdir -p dist
+          source=target/release/codex-meter
+          if [ "${{ runner.os }}" = Windows ]; then source="$source.exe"; fi
+          cp "$source" "dist/${{ matrix.asset }}"
+          "dist/${{ matrix.asset }}" --version
+          "dist/${{ matrix.asset }}" --no-color demo >/dev/null
+      - name: Create platform checksum
         shell: python {0}
         run: |
-          import os
-          import subprocess
+          import hashlib
           from pathlib import Path
 
-          source = Path("dist/codex-meter.exe" if os.name == "nt" else "dist/codex-meter")
-          target = Path("dist/${{ matrix.asset }}")
-          source.rename(target)
-          subprocess.run([str(target.resolve()), "--version"], check=True)
-          subprocess.run([str(target.resolve()), "--no-color", "demo"], check=True)
-          print(f"{target.name}: {target.stat().st_size / 1024 / 1024:.1f} MiB")
-      - name: Verify optional commands remain bundled
+          asset = Path("dist/${{ matrix.asset }}")
+          digest = hashlib.sha256(asset.read_bytes()).hexdigest()
+          Path("dist/SHA256SUMS").write_text(f"{digest}  {asset.name}\n", encoding="ascii")
+      - name: Download stable v0.15 binary for upgrade test
         shell: python {0}
         run: |
-          import os
-          import subprocess
-          import tempfile
+          import urllib.request
           from pathlib import Path
 
-          executable = Path("dist/${{ matrix.asset }}").resolve()
-          with tempfile.TemporaryDirectory() as home:
-              prefix = [str(executable), "--home", home, "--no-color"]
-              checks = (
-                  ([*prefix, "doctor"], 0, None),
-                  ([*prefix, "otel", "config"], 0, None),
-                  ([*prefix, "network", "show", "--limit", "0"], 0, None),
-                  ([*prefix, "remote", "list"], 0, None),
-                  ([*prefix, "app-server", "ingest", "-"], 0, b""),
-                  ([*prefix, "proxy", "tls"], 2, None),
-              )
-              for command, expected, stdin in checks:
-                  result = subprocess.run(command, input=stdin, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                  if result.returncode != expected:
-                      raise SystemExit(f"optional command failed ({result.returncode} != {expected}): {command[-2:]}")
-      - name: Smoke-test Linux/macOS installer
+          target = Path("stable/${{ matrix.asset }}")
+          target.parent.mkdir(parents=True, exist_ok=True)
+          url = "https://github.com/DelicateNorman/codex-meter/releases/download/v0.15.0/${{ matrix.asset }}"
+          urllib.request.urlretrieve(url, target)
+          target.chmod(0o755)
+      - name: Unix install, upgrade, checksum, rollback, and history acceptance
         if: runner.os != 'Windows'
-        run: |
-          cd dist
-          if command -v sha256sum >/dev/null 2>&1; then
-            sha256sum "${{ matrix.asset }}" > SHA256SUMS
-          else
-            shasum -a 256 "${{ matrix.asset }}" > SHA256SUMS
-          fi
-          cd ..
-          CODEX_METER_BASE_URL="$PWD/dist" CODEX_METER_BIN_DIR="$RUNNER_TEMP/codex-meter-bin" sh install.sh
-          "$RUNNER_TEMP/codex-meter-bin/codex-meter" --version
-      - name: Smoke-test Windows installer
+        shell: bash
+        run: sh tests/install_unix_acceptance.sh "$PWD/dist" "${{ matrix.asset }}" "$PWD/stable/${{ matrix.asset }}"
+      - name: Windows install, upgrade, checksum, rollback, and history acceptance
         if: runner.os == 'Windows'
         shell: pwsh
-        run: |
-          $asset = "${{ matrix.asset }}"
-          $hash = (Get-FileHash -Algorithm SHA256 (Join-Path "dist" $asset)).Hash.ToLowerInvariant()
-          "$hash  $asset" | Set-Content -Encoding ascii (Join-Path "dist" "SHA256SUMS")
-          $installDir = Join-Path $env:RUNNER_TEMP "codex-meter-bin"
-          .\install.ps1 -BaseUrl (Resolve-Path "dist").Path -BinDir $installDir
-          & (Join-Path $installDir "codex-meter.exe") --version
+        run: .\tests\install_windows_acceptance.ps1 -AssetDir (Resolve-Path dist).Path -AssetName "${{ matrix.asset }}" -OldBinary (Resolve-Path "stable/${{ matrix.asset }}").Path
+      - name: Install Windows ConPTY driver
+        if: runner.os == 'Windows'
+        run: python -m pip install pywinpty==3.0.5
+      - name: Native terminal interaction
+        run: python tests/interactive_pty_smoke.py "dist/${{ matrix.asset }}"
       - uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.asset }}
           path: dist/${{ matrix.asset }}
           if-no-files-found: error
 
-  wheel:
+  bundle:
+    name: Assemble checksummed release
+    needs: binaries
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-      - run: python -m pip install build
-      - run: python -m build --wheel
-      - uses: actions/upload-artifact@v7
-        with:
-          name: release-wheel
-          path: dist/*.whl
-          if-no-files-found: error
-
-  publish:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: [binaries, wheel]
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v6
       - uses: actions/download-artifact@v8
         with:
           pattern: release-*
           path: dist
           merge-multiple: true
-      - name: Create checksums
-        run: cd dist && sha256sum codex-meter-* codex_meter-*.whl > SHA256SUMS
+      - name: Verify manifest and create checksums
+        run: |
+          set -eu
+          test -f dist/codex-meter-linux-x86_64
+          test -f dist/codex-meter-macos-arm64
+          test -f dist/codex-meter-macos-x86_64
+          test -f dist/codex-meter-windows-x86_64.exe
+          cd dist
+          sha256sum codex-meter-linux-x86_64 codex-meter-macos-arm64 codex-meter-macos-x86_64 codex-meter-windows-x86_64.exe > SHA256SUMS
+          sha256sum --check SHA256SUMS
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-bundle
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: bundle
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-bundle
+          path: dist
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --title "Codex Meter $GITHUB_REF_NAME" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag --title "Codex Meter $GITHUB_REF_NAME" --generate-notes

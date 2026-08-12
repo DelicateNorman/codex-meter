@@ -2,7 +2,7 @@ name: Build Rust release candidate
 
 on:
   push:
-    branches: [rust-rewrite]
+    branches: [main, rust-rewrite]
   workflow_dispatch:
 
 permissions:
