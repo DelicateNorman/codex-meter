@@ -2,6 +2,15 @@
 
 All notable changes to Codex Meter are documented here.
 
+## [0.16.0-alpha.1] - 2026-08-12
+
+- Rewrite the application runtime in Rust while retaining the v0.15 command surface, SQLite schema, configuration, pricing, privacy rules, and reports.
+- Keep interactive first paint non-blocking while weekly limits and SSH sources update in background workers.
+- Port Rollout, quota, OTLP, App Server, network capture, CONNECT, reverse proxy, TLS diagnostics, export, and doctor functionality.
+- Add a Linux/macOS/Windows Rust CI matrix, release-candidate artifact workflow, and automated Python/Rust database/export differential test.
+- Validate the complete local 0.63 GiB Rollout history: 60 files, 1,712 turns, 20,643 calls, and 1,926 tools matched Python exactly.
+- Reduce the optimized Linux executable to about 5.7 MiB and improve no-op startup from roughly 90 ms to below the timer's 10 ms resolution on the development machine.
+
 ## [0.15.0] - 2026-08-12
 
 - Add configurable SSH sources for Codex Desktop and CLI sessions executed on remote hosts.

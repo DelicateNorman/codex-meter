@@ -30,6 +30,11 @@
 
 Codex Meter turns the history already written by Codex—on this computer or configured SSH hosts—into an interactive terminal dashboard. It shows where your tokens went, which projects and models used them, how well caching worked, how long responses took, and how much of the active account's seven-day allowance remains.
 
+> **Rust rewrite branch:** `rust-rewrite` contains the v0.16 release candidate.
+> It keeps the Python v0.15 database/config format, while replacing the runtime
+> with one small native executable. The pinned v0.15 installer remains the
+> stable path until the cross-platform candidate checks are green.
+
 It is a separate companion application. It does **not** replace or patch the official `codex` command.
 
 > Codex Meter is an independent community project and is not affiliated with or endorsed by OpenAI.

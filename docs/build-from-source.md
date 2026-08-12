@@ -1,5 +1,29 @@
 # Build from source
 
+> The stable v0.15 release is built from Python. The `rust-rewrite` branch is
+> the next implementation and can be built with the stable Rust toolchain.
+
+## Rust rewrite (rust-rewrite branch)
+
+Install [Rust with rustup](https://rustup.rs/), then run:
+
+```bash
+git clone https://github.com/DelicateNorman/codex-meter.git
+cd codex-meter
+git switch rust-rewrite
+cargo test --all-targets --locked
+cargo build --release --locked
+./target/release/codex-meter --no-color demo
+./target/release/codex-meter
+```
+
+On Windows PowerShell, the executable is
+`target\release\codex-meter.exe`. The Rust executable does not need Python at
+runtime. It deliberately reuses `~/.codex-meter/config.toml`, `pricing.json`,
+and `meter.db`, so existing history is preserved.
+
+## Stable Python v0.15 source build
+
 Codex Meter supports Linux, macOS, and native Windows with Python 3.11 or newer and Git. The runtime itself has no third-party Python dependencies.
 
 ## Linux and macOS

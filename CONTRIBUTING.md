@@ -1,8 +1,19 @@
 # Contributing
 
-Codex Meter targets Linux, macOS, and native Windows with Python 3.11+. Bug reports, privacy reviews, documentation fixes, and focused pull requests are welcome.
+Codex Meter targets Linux, macOS, and native Windows. Stable v0.15 uses Python 3.11+; the `rust-rewrite` branch uses stable Rust 1.85+. Bug reports, privacy reviews, documentation fixes, and focused pull requests are welcome.
 
 ## Development setup
+
+For the Rust rewrite:
+
+```bash
+git switch rust-rewrite
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test --all-targets --locked
+```
+
+For the stable Python implementation:
 
 ```bash
 git clone https://github.com/DelicateNorman/codex-meter.git

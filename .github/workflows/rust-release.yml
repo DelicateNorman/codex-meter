@@ -1,0 +1,45 @@
+name: Build Rust release candidate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  binaries:
+    name: ${{ matrix.asset }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            asset: codex-meter-linux-x86_64
+          - os: macos-15
+            asset: codex-meter-macos-arm64
+          - os: macos-15-intel
+            asset: codex-meter-macos-x86_64
+          - os: windows-2025
+            asset: codex-meter-windows-x86_64.exe
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --locked
+      - name: Stage executable
+        shell: bash
+        run: |
+          set -eu
+          mkdir -p dist
+          source=target/release/codex-meter
+          if [ "${{ runner.os }}" = Windows ]; then source="$source.exe"; fi
+          cp "$source" "dist/${{ matrix.asset }}"
+          "dist/${{ matrix.asset }}" --version
+          "dist/${{ matrix.asset }}" --no-color demo >/dev/null
+      - uses: actions/upload-artifact@v7
+        with:
+          name: rust-${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+          if-no-files-found: error
+
