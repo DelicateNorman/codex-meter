@@ -12,7 +12,7 @@ evidence.
 | Area | Evidence recorded for v0.16.0 |
 |---|---|
 | Command and data surface | All 28 Python top-level commands and their nested subcommands/options are present in the Rust parser. Empty-state command smoke tests pass on every supported target. |
-| Rust tests | 79 tests pass with both current stable Rust and the declared minimum Rust 1.85 toolchain. `cargo fmt --check` and strict Clippy (`-D warnings`) pass. |
+| Rust tests | 80 tests pass on every platform, with two additional Windows-only command-shim tests. The suite uses both current stable Rust and the declared minimum Rust 1.85 toolchain; `cargo fmt --check` and strict Clippy (`-D warnings`) pass. |
 | Python regression | All 71 Python tests pass while the Rust candidate is present, including the automated Python/Rust database and JSON/CSV export differential fixture. |
 | Full-history differential | A 0.63 GiB local history (60 Rollouts) produced exactly 1,712 turns, 20,643 LLM calls, 1,926 tools, 12 model groups, 50 sessions, 13 project groups, and matching exports in both implementations. |
 | Existing-home compatibility | A backup of the populated v0.15 home opened without migration loss; all read/report/export commands passed, table counts were unchanged, and SQLite integrity remained `ok`. A final isolated upgrade and rollback pointed at the live `~/.codex-meter`; an exact SHA-256 manifest of every history file was unchanged after both operations. |

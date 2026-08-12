@@ -2,6 +2,26 @@
 
 All notable changes to Codex Meter are documented here.
 
+## [0.16.1] - 2026-08-13
+
+### Fixed
+
+- Resolve Windows `PATHEXT` command shims such as npm-installed `codex.cmd`, so
+  weekly account limits and App Server diagnostics work when `codex --version`
+  works in PowerShell.
+- Put the native Rust install directory first in both the current and user
+  Windows `PATH`, preventing an older Python `codex-meter` from taking priority.
+- Replace raw Windows file-not-found text with an actionable Codex CLI/PATH
+  message when no Codex command is available.
+
+### Verified
+
+- Execute a real `.cmd` shim with piped App Server JSONL and read a synthetic
+  seven-day quota on Windows CI.
+- Upgrade with an older Python executable first on `PATH`, then verify the Rust
+  executable wins while checksum rejection, rollback, and history preservation
+  continue to pass.
+
 ## [0.16.0] - 2026-08-13
 
 ### Added
@@ -174,6 +194,7 @@ First public Linux release.
 - Versioned API-equivalent pricing with unknown prices shown as `N/A`.
 - One-line, no-sudo Linux installer.
 
+[0.16.1]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.1
 [0.16.0]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.0
 [0.16.0-beta.3]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.0-beta.3
 [0.16.0-beta.2]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.0-beta.2
