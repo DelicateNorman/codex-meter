@@ -13,7 +13,12 @@ Rust workflow were both green:
 - [release installation and artifact run](https://github.com/DelicateNorman/codex-meter/actions/runs/31606754285)
 - [format, Clippy, tests, differential fixture, and command-smoke run](https://github.com/DelicateNorman/codex-meter/actions/runs/31606754311)
 
-No v0.16 tag or public release was created by this rehearsal.
+The candidate was subsequently published as the public
+[v0.16.0-beta.1 Rust prerelease](https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.0-beta.1).
+Its [tagged release run](https://github.com/DelicateNorman/codex-meter/actions/runs/31610921094)
+passed the same four-platform build and acceptance matrix, published only the
+four native Rust executables plus `SHA256SUMS`, and then repeated one-line
+installation and rollback from the public URLs on all four platforms.
 
 ## Per-platform release rehearsal
 
@@ -61,15 +66,15 @@ removed after verification.
 
 ## Live history preservation
 
-The final downloaded candidate was installed and rolled back in an isolated bin
-directory while `CODEX_METER_HOME` pointed to the development user's real
+The final public beta was installed and rolled back in an isolated bin directory
+while `CODEX_METER_HOME` pointed to the development user's real
 `~/.codex-meter`. SHA-256 hashes for every file under that directory matched
-exactly before installation, after upgrade, and after rollback. The real installed
+exactly before installation, after upgrade, and after rollback. The installed
+candidate hash matched the public Linux asset. The real
 `~/.local/bin/codex-meter` was not replaced and remains v0.14.2.
 
 ## Remaining stable-release checks
 
-- Create a v0.16 prerelease and repeat installation through its public GitHub release URL.
 - Record a short manual interaction in macOS Terminal and Windows Terminal; add a WSL smoke check.
 - Run privileged live `tcpdump` capture on an approved machine. Parser behavior and safe failure are already automated.
 
