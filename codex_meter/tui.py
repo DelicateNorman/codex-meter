@@ -34,7 +34,7 @@ def render_overview(
     quota_message: str | None = None,
 ) -> str:
     color = _supports_color() if color is None else color
-    width = max(80, min(width or shutil.get_terminal_size((110, 30)).columns, 132))
+    width = max(40, min(width or shutil.get_terminal_size((110, 30)).columns, 132))
     inner = width - 2
     lines: list[str] = []
 

@@ -5,23 +5,18 @@ import csv
 import json
 import os
 import sys
+import threading
 import time
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 from . import __version__
-from .analytics import PERFORMANCE_METRICS, cache_summary, context_and_retry_summary, performance_summary, weighted_percentile
-from .collectors.app_server import AppServerAdapter, ingest_stream, proxy_stdio
-from .collectors.otlp_http import OtlpServer
 from .collectors.session_jsonl import SessionJsonlCollector, discover_rollouts
 from .config import initialize_home, load_identity, update_account_identity
-from .doctor import run_doctor
 from .interactive import run_interactive
 from .pricing import PricingCatalog
 from .quota import QuotaUnavailable, WeeklyQuota, read_weekly_quotas
-from .network import TunnelProxyServer, capture_metadata, probe_endpoint
-from .proxy import ReverseProxyServer, initialize_tls_material, wrap_server_tls
 from .storage import Storage
 from .tui import render_history, render_models, render_network, render_overview
 
@@ -308,6 +303,8 @@ def _import(
 
 
 def _doctor(storage: Storage) -> int:
+    from .doctor import run_doctor
+
     print("Codex Meter Doctor\n")
     status_symbols = {"yes": "✓", "no": "✗", "disabled": "○", "unknown": "?", "experimental": "△"}
     for check in run_doctor(_codex_home(), storage):
@@ -403,19 +400,49 @@ def _history(
 
 def _interactive_dashboard(storage: Storage, catalog: PricingCatalog, *, color: bool) -> int:
     weekly_quotas: tuple[WeeklyQuota, ...] = ()
-    quota_message: str | None = None
+    quota_message: str | None = "ACCOUNT WEEKLY LIMITS  Loading…"
+    quota_loading = False
+    quota_lock = threading.Lock()
+    quota_changed = threading.Event()
 
-    def refresh_quota() -> None:
-        nonlocal weekly_quotas, quota_message
+    def load_quota() -> None:
+        nonlocal weekly_quotas, quota_message, quota_loading
         try:
-            weekly_quotas = read_weekly_quotas()
+            loaded = read_weekly_quotas()
         except QuotaUnavailable as error:
-            weekly_quotas = ()
-            quota_message = f"ACCOUNT WEEKLY LIMITS  Unavailable · {error} · press r to retry"
+            with quota_lock:
+                weekly_quotas = ()
+                quota_message = f"ACCOUNT WEEKLY LIMITS  Unavailable · {error} · press r to retry"
+                quota_loading = False
         else:
-            quota_message = None
+            with quota_lock:
+                weekly_quotas = loaded
+                quota_message = None
+                quota_loading = False
+        quota_changed.set()
 
-    refresh_quota()
+    def start_quota_refresh(*, notify: bool = True) -> None:
+        nonlocal quota_message, quota_loading
+        with quota_lock:
+            if quota_loading:
+                return
+            quota_loading = True
+            quota_message = "ACCOUNT WEEKLY LIMITS  Loading…"
+        if notify:
+            quota_changed.set()
+        threading.Thread(
+            target=load_quota,
+            name="codex-meter-weekly-quota",
+            daemon=True,
+        ).start()
+
+    def consume_quota_update() -> bool:
+        if not quota_changed.is_set():
+            return False
+        quota_changed.clear()
+        return True
+
+    start_quota_refresh(notify=False)
 
     def content(
         view: str,
@@ -458,23 +485,32 @@ def _interactive_dashboard(storage: Storage, catalog: PricingCatalog, *, color: 
         )]
         if project:
             label += f" · PROJECT {project}"
+        with quota_lock:
+            current_quotas = weekly_quotas
+            current_quota_message = quota_message
         return render_overview(
             overview,
             rows,
             period=label,
             color=use_color,
             width=width,
-            weekly_quotas=weekly_quotas,
-            quota_message=quota_message,
+            weekly_quotas=current_quotas,
+            quota_message=current_quota_message,
         )
 
     def refresh() -> None:
         result = _import(storage, catalog, _codex_home() / "sessions", force=False, quiet=True)
-        refresh_quota()
+        start_quota_refresh()
         if result:
             raise OSError("one or more rollout files could not be imported")
 
-    return run_interactive(content, refresh, storage.project_names, color=color)
+    return run_interactive(
+        content,
+        refresh,
+        storage.project_names,
+        consume_quota_update,
+        color=color,
+    )
 
 
 def _account(storage: Storage, identity: object, args: argparse.Namespace) -> int:
@@ -535,6 +571,8 @@ def _period_bounds(period: str, anchor_text: str | None) -> tuple[str | None, st
 
 
 def _perf(storage: Storage, selected_date: str | None) -> int:
+    from .analytics import PERFORMANCE_METRICS, performance_summary
+
     rows = performance_summary(storage.metric_points(selected_date, PERFORMANCE_METRICS))
     print(f"{'METRIC':<58} {'COUNT':>8} {'AVG':>12} {'P50':>12} {'P95':>12} {'TPS':>9}")
     for row in rows:
@@ -551,6 +589,8 @@ def _perf(storage: Storage, selected_date: str | None) -> int:
 
 
 def _cache(storage: Storage, catalog: PricingCatalog, selected_date: str | None) -> int:
+    from .analytics import cache_summary, context_and_retry_summary
+
     rows = storage.usage_calls(selected_date)
     cache = cache_summary(rows, catalog)
     context = context_and_retry_summary(rows)
@@ -610,6 +650,8 @@ def _agents(storage: Storage, selected_date: str | None) -> int:
 
 
 def _tools(storage: Storage, selected_date: str | None) -> int:
+    from .analytics import weighted_percentile
+
     durations = storage.tool_durations(selected_date)
     print(f"{'TOOL':<42} {'CALLS':>7} {'SUCCESS':>9} {'AVG':>10} {'P50':>10} {'P95':>10} {'TOTAL':>11}")
     for row in storage.tool_breakdown(selected_date):
@@ -677,6 +719,8 @@ def _statusline(storage: Storage) -> int:
 
 
 def _otel(storage: Storage, args: argparse.Namespace) -> int:
+    from .collectors.otlp_http import OtlpServer
+
     if args.otel_command == "config":
         base = f"http://{args.host}:{args.port}"
         print("[otel]")
@@ -691,6 +735,8 @@ def _otel(storage: Storage, args: argparse.Namespace) -> int:
 
 
 def _app_server(storage: Storage, catalog: PricingCatalog, args: argparse.Namespace) -> int:
+    from .collectors.app_server import AppServerAdapter, ingest_stream, proxy_stdio
+
     if args.app_command == "ingest":
         adapter = AppServerAdapter(storage, catalog)
         if args.path == "-":
@@ -707,6 +753,8 @@ def _app_server(storage: Storage, catalog: PricingCatalog, args: argparse.Namesp
 
 
 def _network(storage: Storage, args: argparse.Namespace) -> int:
+    from .network import capture_metadata, probe_endpoint
+
     if args.network_command == "probe":
         flow = probe_endpoint(args.host, args.port)
         storage.insert_network_flow(flow)
@@ -742,6 +790,9 @@ def _network(storage: Storage, args: argparse.Namespace) -> int:
 
 
 def _proxy(storage: Storage, args: argparse.Namespace, home: Path) -> int:
+    from .network import TunnelProxyServer
+    from .proxy import ReverseProxyServer, initialize_tls_material, wrap_server_tls
+
     if args.proxy_command == "tunnel":
         server = TunnelProxyServer((args.bind, args.port), storage)
         print(f"CONNECT proxy on http://{args.bind}:{server.server_address[1]} (TLS opaque; metadata only)", file=sys.stderr)

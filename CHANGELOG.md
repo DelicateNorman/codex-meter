@@ -2,6 +2,14 @@
 
 All notable changes to Codex Meter are documented here.
 
+## [0.14.2] - 2026-08-12
+
+- Open the interactive dashboard immediately and load live weekly quotas in the background.
+- Redraw quota bars automatically when Codex responds, without waiting for a key press.
+- Keep the dashboard and weekly quota rows visible in terminals narrower than 80 columns.
+- Lazy-load diagnostic modules so ordinary startup imports less code and uses less memory.
+- Strip and optimize standalone release bundles while smoke-testing every optional command.
+
 ## [0.14.1] - 2026-08-12
 
 - Render each live seven-day account quota as a prominent usage bar at the top of the dashboard.
@@ -84,6 +92,7 @@ First public Linux release.
 - Versioned API-equivalent pricing with unknown prices shown as `N/A`.
 - One-line, no-sudo Linux installer.
 
+[0.14.2]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.14.2
 [0.14.1]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.14.1
 [0.14.0]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.14.0
 [0.13.0]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.13.0

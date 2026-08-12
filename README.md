@@ -13,7 +13,7 @@ Standalone releases do not require Python and never replace the official `codex`
 Install for the current user without `sudo`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.14.1/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.14.2/install.sh | sh
 ```
 
 ### Windows PowerShell
@@ -21,7 +21,7 @@ curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.14.1/
 Install for the current Windows user without Administrator privileges:
 
 ```powershell
-irm https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.14.1/install.ps1 | iex
+irm https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.14.2/install.ps1 | iex
 ```
 
 Open a new terminal, then run:
@@ -32,7 +32,7 @@ codex-meter
 
 The shell installer places the command under `~/.local/bin`. The PowerShell installer uses `%LOCALAPPDATA%\Programs\CodexMeter\bin` and adds that directory to the current user's `PATH`. Both download the matching standalone release, verify it against the release's `SHA256SUMS`, and preserve existing data under `~/.codex-meter`. You can inspect [install.sh](install.sh) and [install.ps1](install.ps1) before running them.
 
-Stable binaries, wheels, checksums, and source archives are published on the [Releases page](https://github.com/DelicateNorman/codex-meter/releases). The commands above are pinned to the tested `v0.14.1` release so installation is reproducible.
+Stable binaries, wheels, checksums, and source archives are published on the [Releases page](https://github.com/DelicateNorman/codex-meter/releases). The commands above are pinned to the tested `v0.14.2` release so installation is reproducible.
 
 Supported release targets are Linux x86_64, macOS arm64 and x86_64, and native Windows x86_64. Windows on ARM can run the x86_64 build through Windows emulation. When Codex itself runs inside WSL2, install the Linux build inside that WSL distribution so Codex Meter reads the same `~/.codex` history.
 
@@ -61,9 +61,9 @@ codex-meter summary --period month --project my-project
 codex-meter doctor
 ```
 
-Running `codex-meter` without a subcommand imports changed rollout files and opens an interactive dashboard. At the top, the overview shows each seven-day account limit reported by Codex as a usage bar, including used percentage, remaining percentage, and reset time in the machine's local timezone. These limits belong to the active Codex account and do not change when a project or reporting period is selected; the `Week` view below them is the separate local usage total for the current calendar week. Press `r` to refresh both local records and the live limits. In the token-ratio panel, `Cached input` is measured against all input tokens, while `Reasoning out` is measured against output tokens.
+Running `codex-meter` without a subcommand imports changed rollout files and opens an interactive dashboard. At the top, the overview shows each seven-day account limit reported by Codex as a usage bar, including used percentage, remaining percentage, and reset time in the machine's local timezone. The dashboard opens immediately with a loading row while Codex supplies these limits in the background, then redraws the bars automatically. These limits belong to the active Codex account and do not change when a project or reporting period is selected; the `Week` view below them is the separate local usage total for the current calendar week. Press `r` to refresh both local records and the live limits. In the token-ratio panel, `Cached input` is measured against all input tokens, while `Reasoning out` is measured against output tokens.
 
-The menu sits below the report: use any arrow key to choose a view, then Enter or Space to open it. The default scope is `All projects`; open `Project` (or `/project`) to choose one imported project, and Today, Week, Month, All time, history, and Network will all use that project until the dashboard exits. The Network view shows first-token latency, end-to-end time, and exact or clearly marked estimated output-token speed. Press `/` to open a focused command palette with short descriptions; Up/Down moves through the commands and automatically changes pages, Enter runs the selected command, and Esc closes the palette. While the palette is open all printable keys, including `q`, are command text. Back on the main screen, `r` refreshes with visible progress and `q` quits. If no usage is found, the dashboard explains how to create and refresh local data. Narrow terminals use compact navigation instead of overflowing, while short terminals keep the most important summary visible. When output is redirected instead of attached to a terminal, the command prints today's overview for compatibility.
+The menu sits below the report: use any arrow key to choose a view, then Enter or Space to open it. The default scope is `All projects`; open `Project` (or `/project`) to choose one imported project, and Today, Week, Month, All time, history, and Network will all use that project until the dashboard exits. The Network view shows first-token latency, end-to-end time, and exact or clearly marked estimated output-token speed. Press `/` to open a focused command palette with short descriptions; Up/Down moves through the commands and automatically changes pages, Enter runs the selected command, and Esc closes the palette. While the palette is open all printable keys, including `q`, are command text. Back on the main screen, `r` refreshes with visible progress and `q` quits. If no usage is found, the dashboard explains how to create and refresh local data. Narrow terminals keep a compact version of the dashboard and navigation instead of hiding the report, while short terminals keep the most important summary visible. When output is redirected instead of attached to a terminal, the command prints today's overview for compatibility.
 
 Project names are derived from the final directory name in each Rollout working directory. Projects with the same final directory name are intentionally grouped together, and recently used projects appear first. Start typing in the Project selector to filter long lists; Unicode names and spaces are supported, Backspace edits the filter, and Esc cancels. The selector resets to `All projects` whenever a new dashboard session starts.
 

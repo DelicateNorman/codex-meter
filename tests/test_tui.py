@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import os
+import threading
+import time
 import unittest
+from unittest.mock import patch
 
+from codex_meter import cli as cli_module
 from codex_meter.interactive import (
     COMMAND_ITEMS,
     InteractiveState,
@@ -21,6 +25,41 @@ from codex_meter.quota import WeeklyQuota
 
 
 class TuiTests(unittest.TestCase):
+    def test_interactive_dashboard_does_not_wait_for_live_quota(self) -> None:
+        release_quota = threading.Event()
+
+        class StorageStub:
+            owner_username = "tester"
+
+            def project_names(self) -> list[str]:
+                return []
+
+            def overview_range(self, *_args: object, **_kwargs: object) -> dict[str, object]:
+                return {}
+
+            def model_breakdown_range(self, *_args: object, **_kwargs: object) -> list[object]:
+                return []
+
+        def delayed_quota() -> tuple[WeeklyQuota, ...]:
+            release_quota.wait(1)
+            return (WeeklyQuota("codex", "Codex", 18, None, 10080),)
+
+        def immediate_ui(render_content, _refresh, _projects, _poll_updates, **_kwargs) -> int:
+            first_screen = render_content("today", 100, False, None)
+            self.assertIn("ACCOUNT WEEKLY LIMITS  Loading…", first_screen)
+            return 0
+
+        started = time.monotonic()
+        try:
+            with patch.object(cli_module, "read_weekly_quotas", delayed_quota), patch.object(
+                cli_module, "run_interactive", immediate_ui,
+            ):
+                result = cli_module._interactive_dashboard(StorageStub(), object(), color=False)
+        finally:
+            release_quota.set()
+        self.assertEqual(result, 0)
+        self.assertLess(time.monotonic() - started, 0.25)
+
     def test_dashboard_shows_account_weekly_quota_and_reset(self) -> None:
         rendered = render_overview(
             {},
@@ -123,6 +162,15 @@ class TuiTests(unittest.TestCase):
             os.write(write_fd, b"\x1b[C\r")
             self.assertEqual(_read_key(read_fd), "right")
             self.assertEqual(_read_key(read_fd), "enter")
+        finally:
+            os.close(read_fd)
+            os.close(write_fd)
+
+    @unittest.skipIf(os.name == "nt", "POSIX select timeout")
+    def test_key_reader_can_poll_without_blocking(self) -> None:
+        read_fd, write_fd = os.pipe()
+        try:
+            self.assertIsNone(_read_key(read_fd, timeout=0.001))
         finally:
             os.close(read_fd)
             os.close(write_fd)
@@ -406,19 +454,24 @@ class TuiTests(unittest.TestCase):
         self.assertIn("terminal too short", rendered)
         self.assertIn("╰────────────────────╯", rendered)
 
-    def test_narrow_terminal_uses_compact_navigation_without_overflow(self) -> None:
+    def test_narrow_terminal_keeps_compact_dashboard_visible_without_overflow(self) -> None:
+        body = render_overview(
+            {}, [], period="TODAY", color=False, width=40,
+            weekly_quotas=(WeeklyQuota("codex", "Codex", 18, None, 10080),),
+        )
         rendered = render_interactive_screen(
             InteractiveState(),
-            "x" * 100,
+            body,
             width=40,
-            height=12,
+            height=14,
             color=False,
             clear=False,
         )
         lines = rendered.splitlines()
-        self.assertLessEqual(len(lines), 12)
-        self.assertTrue(all(len(line) <= 40 for line in lines))
-        self.assertIn("40 columns available · 80 required", rendered)
+        self.assertLessEqual(len(lines), 14)
+        self.assertTrue(all(_display_width(line) <= 40 for line in lines))
+        self.assertIn("ACCOUNT WEEKLY LIMITS", rendered)
+        self.assertIn("82% left", rendered)
         self.assertIn("Menu 1/12 · ▶ Today", rendered)
 
     def test_project_picker_adapts_page_size_to_short_terminals(self) -> None:

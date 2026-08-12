@@ -6,6 +6,7 @@ import os
 import select
 import shutil
 import sys
+import time
 import unicodedata
 from dataclasses import dataclass
 from typing import Callable, TextIO
@@ -192,8 +193,6 @@ def render_interactive_screen(
         body = "\n".join(_command_palette_lines(state, layout_width, color))
     elif state.show_help:
         body = _help_text(layout_width)
-    elif width < 80 and not state.project_picker:
-        body = _narrow_terminal_text(width)
     else:
         body = content
     body_lines = body.splitlines()
@@ -229,6 +228,7 @@ def run_interactive(
     render_content: Callable[[str, int, bool, str | None], str],
     refresh: Callable[[], None],
     list_projects: Callable[[], list[str]] | None = None,
+    poll_updates: Callable[[], bool] | None = None,
     *,
     color: bool = True,
     input_stream: TextIO = sys.stdin,
@@ -274,28 +274,35 @@ def run_interactive(
                 )
             )
             output_stream.flush()
-            action = handle_key(state, _read_key(fd))
-            if action == "refresh":
-                state.show_help = False
-                state.message = "Refreshing local Codex records…"
-                output_stream.write(
-                    render_interactive_screen(
-                        state,
-                        last_content,
-                        width=size.columns,
-                        height=size.lines,
-                        color=color,
-                    )
-                )
-                output_stream.flush()
-                try:
-                    refresh()
-                except (OSError, ValueError) as error:
-                    state.message = f"Refresh failed: {error}"
-                else:
-                    state.message = "Usage refreshed"
+            while state.running:
+                key = _read_key(fd, timeout=0.1 if poll_updates else None)
+                if key is None:
+                    if poll_updates is not None and poll_updates():
+                        break
+                    continue
+                action = handle_key(state, key)
+                if action == "refresh":
                     state.show_help = False
-                    _sync_projects(state, list_projects() if list_projects else [])
+                    state.message = "Refreshing local Codex records…"
+                    output_stream.write(
+                        render_interactive_screen(
+                            state,
+                            last_content,
+                            width=size.columns,
+                            height=size.lines,
+                            color=color,
+                        )
+                    )
+                    output_stream.flush()
+                    try:
+                        refresh()
+                    except (OSError, ValueError) as error:
+                        state.message = f"Refresh failed: {error}"
+                    else:
+                        state.message = "Usage refreshed"
+                        state.show_help = False
+                        _sync_projects(state, list_projects() if list_projects else [])
+                break
     except KeyboardInterrupt:
         pass
     finally:
@@ -605,14 +612,6 @@ def _character_width(character: str) -> int:
     return 2 if unicodedata.east_asian_width(character) in ("F", "W") else 1
 
 
-def _narrow_terminal_text(width: int) -> str:
-    return "\n".join((
-        "Terminal too narrow for the dashboard"[:width],
-        f"{width} columns available · 80 required"[:width],
-        "Resize to see stats; keys still work."[:width],
-    ))
-
-
 def _show_message_in_status(state: InteractiveState) -> bool:
     return bool(
         state.message
@@ -658,9 +657,11 @@ def _help_text(width: int) -> str:
     return "\n".join(line[:width] for line in lines)
 
 
-def _read_key(fd: int) -> str:
+def _read_key(fd: int, timeout: float | None = None) -> str | None:
     if os.name == "nt":
-        return _read_windows_key()
+        return _read_windows_key(timeout)
+    if timeout is not None and not select.select([fd], [], [], max(0.0, timeout))[0]:
+        return None
     value = os.read(fd, 1)
     if value == b"\x1b":
         if not select.select([fd], [], [], 0.03)[0]:
@@ -704,7 +705,14 @@ def _read_key(fd: int) -> str:
         return ""
 
 
-def _read_windows_key() -> str:
+def _read_windows_key(timeout: float | None = None) -> str | None:
+    if timeout is not None:
+        deadline = time.monotonic() + max(0.0, timeout)
+        while not msvcrt.kbhit():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return None
+            time.sleep(min(0.01, remaining))
     value = msvcrt.getwch()
     if value in ("\x00", "\xe0"):
         return {

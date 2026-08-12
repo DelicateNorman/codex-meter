@@ -18,19 +18,23 @@ jobs:
         include:
           - os: ubuntu-24.04
             asset: codex-meter-linux-x86_64
+            pyinstaller_args: --strip
           - os: windows-2025
             asset: codex-meter-windows-x86_64.exe
+            pyinstaller_args: ""
           - os: macos-15
             asset: codex-meter-macos-arm64
+            pyinstaller_args: --strip
           - os: macos-15-intel
             asset: codex-meter-macos-x86_64
+            pyinstaller_args: --strip
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
       - run: python -m pip install . "pyinstaller>=6.11,<7"
-      - run: pyinstaller --noconfirm --clean --onefile --name codex-meter --collect-data codex_meter --collect-submodules email --hidden-import email.quoprimime --hidden-import email.base64mime packaging/codex_meter_entry.py
+      - run: pyinstaller --noconfirm --clean --onefile --optimize 2 ${{ matrix.pyinstaller_args }} --name codex-meter --collect-data codex_meter --collect-submodules email --hidden-import email.quoprimime --hidden-import email.base64mime packaging/codex_meter_entry.py
       - name: Name and verify executable
         shell: python {0}
         run: |
@@ -43,6 +47,29 @@ jobs:
           source.rename(target)
           subprocess.run([str(target.resolve()), "--version"], check=True)
           subprocess.run([str(target.resolve()), "--no-color", "demo"], check=True)
+          print(f"{target.name}: {target.stat().st_size / 1024 / 1024:.1f} MiB")
+      - name: Verify optional commands remain bundled
+        shell: python {0}
+        run: |
+          import os
+          import subprocess
+          import tempfile
+          from pathlib import Path
+
+          executable = Path("dist/${{ matrix.asset }}").resolve()
+          with tempfile.TemporaryDirectory() as home:
+              prefix = [str(executable), "--home", home, "--no-color"]
+              checks = (
+                  ([*prefix, "doctor"], 0, None),
+                  ([*prefix, "otel", "config"], 0, None),
+                  ([*prefix, "network", "show", "--limit", "0"], 0, None),
+                  ([*prefix, "app-server", "ingest", "-"], 0, b""),
+                  ([*prefix, "proxy", "tls"], 2, None),
+              )
+              for command, expected, stdin in checks:
+                  result = subprocess.run(command, input=stdin, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                  if result.returncode != expected:
+                      raise SystemExit(f"optional command failed ({result.returncode} != {expected}): {command[-2:]}")
       - name: Smoke-test Linux/macOS installer
         if: runner.os != 'Windows'
         run: |
