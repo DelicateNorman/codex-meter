@@ -98,7 +98,8 @@ def render_overview(
     header = f"{'MODEL':<25} {'EFFORT':<9} {'CALLS':>6} {'TOKENS':>10} {'CACHE':>7} {'REASON':>10} {'COST':>10}"
     lines.append(frame(header, MUTED))
     if not models:
-        lines.append(frame("No imported usage for this period.", MUTED))
+        lines.append(frame("No Codex usage found for this period or project.", MUTED))
+        lines.append(frame("Use Codex normally, then press r here to refresh.", YELLOW))
     for row in models[:8]:
         row_input = _int(row.get("input_tokens"))
         row_cached = _int(row.get("cached_input_tokens"))

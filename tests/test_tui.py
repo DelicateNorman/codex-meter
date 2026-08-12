@@ -24,7 +24,8 @@ class TuiTests(unittest.TestCase):
         self.assertIn("API-EQUIV", rendered)
         self.assertIn("N/A", rendered)
         self.assertIn("Cache miss", rendered)
-        self.assertIn("No imported usage", rendered)
+        self.assertIn("No Codex usage found", rendered)
+        self.assertIn("press r here to refresh", rendered)
         self.assertNotIn("\x1b", rendered)
 
     def test_arrow_enter_and_space_navigate_views(self) -> None:
@@ -245,6 +246,21 @@ class TuiTests(unittest.TestCase):
         self.assertIn("dashboard", rendered)
         self.assertLess(rendered.index("dashboard"), rendered.index("▶ Today"))
         self.assertNotIn("\x1b", rendered)
+
+    def test_help_escape_returns_cursor_to_active_view(self) -> None:
+        state = InteractiveState(active_view="month", selected=2, message="Month")
+        handle_key(state, "?")
+        self.assertTrue(state.show_help)
+        state.selected = 10
+        self.assertIsNone(handle_key(state, "escape"))
+        self.assertFalse(state.show_help)
+        self.assertEqual(state.selected, 2)
+        self.assertEqual(state.message, "Month")
+
+    def test_refresh_shortcut_closes_help_before_refresh(self) -> None:
+        state = InteractiveState(active_view="week", selected=10, show_help=True, message="Help")
+        self.assertEqual(handle_key(state, "r"), "refresh")
+        self.assertFalse(state.show_help)
 
     def test_wide_short_screen_wraps_menu_and_preserves_panel_bottom(self) -> None:
         body = "\n".join([

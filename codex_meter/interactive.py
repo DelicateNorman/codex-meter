@@ -103,9 +103,11 @@ def handle_key(state: InteractiveState, key: str) -> str | None:
     if key == "escape":
         if state.show_help:
             state.show_help = False
+            state.selected = _menu_index(state.active_view)
             state.message = _label_for(state.active_view)
         return None
     if key == "r":
+        state.show_help = False
         return "refresh"
     if key == "?":
         state.show_help = True
@@ -169,7 +171,7 @@ def render_interactive_screen(
         controls = (
             "Type filter · ↑/↓ · Enter · Esc"
             if layout_width < 60
-            else "Type to filter · ↑/↓ choose · Enter/Space apply · Esc cancel"
+            else "Type to filter · ↑/↓ choose · Enter apply · Esc cancel"
         )
     else:
         controls = (
@@ -233,6 +235,7 @@ def run_interactive(
 
     state = InteractiveState()
     _sync_projects(state, list_projects() if list_projects else [])
+    last_content = ""
     fd = input_stream.fileno()
     previous = termios.tcgetattr(fd)
     output_stream.write("\x1b[?1049h\x1b[?25l")
@@ -253,6 +256,7 @@ def run_interactive(
                 content = render_content(
                     state.active_view, size.columns, color, state.project_filter,
                 )
+                last_content = content
             output_stream.write(
                 render_interactive_screen(
                     state,
@@ -265,6 +269,18 @@ def run_interactive(
             output_stream.flush()
             action = handle_key(state, _read_key(fd))
             if action == "refresh":
+                state.show_help = False
+                state.message = "Refreshing local Codex records…"
+                output_stream.write(
+                    render_interactive_screen(
+                        state,
+                        last_content,
+                        width=size.columns,
+                        height=size.lines,
+                        color=color,
+                    )
+                )
+                output_stream.flush()
                 try:
                     refresh()
                 except (OSError, ValueError) as error:
@@ -621,12 +637,15 @@ def _help_text(width: int) -> str:
         "  /           type a slash command",
         "  r           refresh local Codex records",
         "  Esc         close help or slash commands",
-        "  q           quit from the main screen",
+        "  q           quit (except while typing a filter or command)",
         "",
         "Slash commands",
         "  /today  /week  /month  /all",
         "  /history day  /history week  /history month",
         "  /network  /project  /refresh  /help  /quit",
+        "",
+        "Project picker",
+        "  Type to filter; Backspace edits; Enter applies; Esc cancels",
     ]
     return "\n".join(line[:width] for line in lines)
 

@@ -2,6 +2,14 @@
 
 All notable changes to Codex Meter are documented here.
 
+## [0.12.4] - 2026-08-12
+
+- Show refresh progress before scanning local Codex records and confirm completion afterward.
+- Add actionable guidance when no usage exists for the selected period or project.
+- Return the menu cursor to the active view when Help closes.
+- Close Help before a keyboard refresh and clarify modal `q` behavior.
+- Extend Help with project-filter controls.
+
 ## [0.12.3] - 2026-08-12
 
 - Add instant keyboard filtering to the interactive project picker.
@@ -51,6 +59,7 @@ First public Linux release.
 - Versioned API-equivalent pricing with unknown prices shown as `N/A`.
 - One-line, no-sudo Linux installer.
 
+[0.12.4]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.12.4
 [0.12.3]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.12.3
 [0.12.2]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.12.2
 [0.12.1]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.12.1
