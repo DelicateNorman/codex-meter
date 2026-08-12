@@ -20,6 +20,7 @@
 </p>
 
 <p align="center">
+  <a href="docs/user-guide.en.md">English user guide</a> ·
   <a href="docs/user-guide.zh-CN.md">中文使用指南</a> ·
   <a href="docs/build-from-source.md">Build from source</a> ·
   <a href="CHANGELOG.md">Changelog</a>
