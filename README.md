@@ -13,7 +13,7 @@ The first public release officially supports **Linux** with Python 3.11 or newer
 Install the latest stable release for the current user without `sudo`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.11.2/install.sh | sh
 ```
 
 Then run:
@@ -24,11 +24,7 @@ codex-meter
 
 The installer places the program under `~/.local/share/codex-meter` and the command under `~/.local/bin`. It does not modify the official `codex` command or delete existing data in `~/.codex-meter`. You can [read the installer](install.sh) before running it.
 
-Stable versions and source archives are published on the [Releases page](https://github.com/DelicateNorman/codex-meter/releases). To install a specific version:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.11.2/install.sh | sh
-```
+Stable versions and source archives are published on the [Releases page](https://github.com/DelicateNorman/codex-meter/releases). The command above is pinned to the tested `v0.11.2` release so that installation is reproducible.
 
 ## Build from source
 

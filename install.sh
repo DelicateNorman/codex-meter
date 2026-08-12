@@ -57,7 +57,7 @@ python_path="$(command -v "$python_command")"
 launcher="$temporary_dir/codex-meter"
 cat >"$launcher" <<EOF
 #!/bin/sh
-PYTHONPATH='$install_root/site' exec '$python_path' -m codex_meter "\$@"
+CODEX_METER_INSTALL_SITE='$install_root/site' exec '$python_path' -c 'import os, sys; sys.path.insert(0, os.environ["CODEX_METER_INSTALL_SITE"]); from codex_meter.cli import main; raise SystemExit(main())' "\$@"
 EOF
 chmod 0755 "$launcher"
 mv "$launcher" "$bin_dir/codex-meter"
