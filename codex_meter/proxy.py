@@ -357,6 +357,7 @@ def initialize_tls_material(directory: Path) -> dict[str, Path]:
         "leaf_key": directory / "localhost-key.pem",
     }
     if all(path.exists() for path in paths.values()):
+        _ensure_certificate_chain(paths["leaf_cert"], paths["ca_cert"])
         return paths
     if any(path.exists() for path in paths.values()):
         raise FileExistsError("partial TLS material exists; move it aside before regenerating")
@@ -383,6 +384,7 @@ def initialize_tls_material(directory: Path) -> dict[str, Path]:
         ])
         _openssl(["req", "-newkey", "rsa:2048", "-nodes", "-sha256", "-subj", "/CN=localhost", "-keyout", str(leaf_key), "-out", str(leaf_csr)])
         _openssl(["x509", "-req", "-in", str(leaf_csr), "-CA", str(ca_cert), "-CAkey", str(ca_key), "-CAcreateserial", "-days", "30", "-sha256", "-extfile", str(extensions), "-out", str(leaf_cert)])
+        _ensure_certificate_chain(leaf_cert, ca_cert)
         for source, target in ((ca_cert, paths["ca_cert"]), (ca_key, paths["ca_key"]), (leaf_cert, paths["leaf_cert"]), (leaf_key, paths["leaf_key"])):
             os.replace(source, target)
     try:
@@ -394,6 +396,14 @@ def initialize_tls_material(directory: Path) -> dict[str, Path]:
         # Windows ACLs, rather than POSIX mode bits, control these files.
         pass
     return paths
+
+
+def _ensure_certificate_chain(leaf_cert: Path, ca_cert: Path) -> None:
+    """Append the local CA so TLS servers present a complete chain on every OS."""
+    leaf_data = leaf_cert.read_bytes()
+    ca_data = ca_cert.read_bytes()
+    if ca_data.strip() not in leaf_data:
+        leaf_cert.write_bytes(leaf_data.rstrip() + b"\n" + ca_data)
 
 
 def _openssl(arguments: list[str]) -> None:

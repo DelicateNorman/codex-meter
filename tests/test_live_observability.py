@@ -256,6 +256,10 @@ class LiveObservabilityTests(unittest.TestCase):
         ).stdout
         self.assertIn("CA:TRUE", certificate)
         self.assertIn("Certificate Sign", certificate)
+        self.assertEqual(
+            paths["leaf_cert"].read_text(encoding="utf-8").count("BEGIN CERTIFICATE"),
+            2,
+        )
         self.assertEqual(paths, initialize_tls_material(self.root / "tls"))
 
     @unittest.skipUnless(shutil.which("openssl"), "openssl is optional")
