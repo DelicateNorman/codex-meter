@@ -2,6 +2,11 @@
 
 All notable changes to Codex Meter are documented here.
 
+## [0.11.2] - 2026-08-12
+
+- Add explicit CA certificate-signing key usage for Python 3.13 TLS verification.
+- Keep the one-line installer pinned to the latest tested stable release.
+
 ## [0.11.1] - 2026-08-12
 
 First public Linux release.
@@ -15,4 +20,5 @@ First public Linux release.
 - Versioned API-equivalent pricing with unknown prices shown as `N/A`.
 - One-line, no-sudo Linux installer.
 
+[0.11.2]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.11.2
 [0.11.1]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.11.1

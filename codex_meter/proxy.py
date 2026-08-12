@@ -373,7 +373,14 @@ def initialize_tls_material(directory: Path) -> dict[str, Path]:
             "extendedKeyUsage=serverAuth\nsubjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1\n",
             encoding="utf-8",
         )
-        _openssl(["req", "-x509", "-newkey", "rsa:3072", "-nodes", "-days", "30", "-sha256", "-subj", "/CN=Codex Meter Local Diagnostic CA", "-keyout", str(ca_key), "-out", str(ca_cert)])
+        _openssl([
+            "req", "-x509", "-newkey", "rsa:3072", "-nodes", "-days", "30", "-sha256",
+            "-subj", "/CN=Codex Meter Local Diagnostic CA",
+            "-addext", "basicConstraints=critical,CA:TRUE",
+            "-addext", "keyUsage=critical,keyCertSign,cRLSign",
+            "-addext", "subjectKeyIdentifier=hash",
+            "-keyout", str(ca_key), "-out", str(ca_cert),
+        ])
         _openssl(["req", "-newkey", "rsa:2048", "-nodes", "-sha256", "-subj", "/CN=localhost", "-keyout", str(leaf_key), "-out", str(leaf_csr)])
         _openssl(["x509", "-req", "-in", str(leaf_csr), "-CA", str(ca_cert), "-CAkey", str(ca_key), "-CAcreateserial", "-days", "30", "-sha256", "-extfile", str(extensions), "-out", str(leaf_cert)])
         for source, target in ((ca_cert, paths["ca_cert"]), (ca_key, paths["ca_key"]), (leaf_cert, paths["leaf_cert"]), (leaf_key, paths["leaf_key"])):

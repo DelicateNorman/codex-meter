@@ -27,7 +27,7 @@ The installer places the program under `~/.local/share/codex-meter` and the comm
 Stable versions and source archives are published on the [Releases page](https://github.com/DelicateNorman/codex-meter/releases). To install a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.11.1/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.11.2/install.sh | sh
 ```
 
 ## Build from source

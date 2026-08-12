@@ -5,6 +5,7 @@ import socket
 import socketserver
 import ssl
 import io
+import subprocess
 import tempfile
 import threading
 import unittest
@@ -233,6 +234,14 @@ class LiveObservabilityTests(unittest.TestCase):
         paths = initialize_tls_material(self.root / "tls")
         self.assertTrue(paths["ca_cert"].exists())
         self.assertEqual(paths["ca_key"].stat().st_mode & 0o777, 0o600)
+        certificate = subprocess.run(
+            ["openssl", "x509", "-in", str(paths["ca_cert"]), "-noout", "-text"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        self.assertIn("CA:TRUE", certificate)
+        self.assertIn("Certificate Sign", certificate)
         self.assertEqual(paths, initialize_tls_material(self.root / "tls"))
 
     def test_explicit_tls_reverse_proxy_terminates_and_reencrypts(self) -> None:
