@@ -19,6 +19,12 @@
   <strong>Weekly limits · Token usage · Projects · Cost estimates · Cache efficiency · Latency · Network diagnostics</strong>
 </p>
 
+<p align="center">
+  <a href="docs/user-guide.zh-CN.md">中文使用指南</a> ·
+  <a href="docs/build-from-source.md">Build from source</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
+
 ![Codex Meter dashboard illustration](docs/assets/codex-meter-hero.png)
 
 Codex Meter turns the local history already written by Codex into an interactive terminal dashboard. It shows where your tokens went, which projects and models used them, how well caching worked, how long responses took, and how much of the active account's seven-day allowance remains.
