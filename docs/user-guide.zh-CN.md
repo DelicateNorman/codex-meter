@@ -13,7 +13,7 @@ Codex Meter 是一个独立于 Codex CLI 的本地统计工具。它读取当前
 打开终端，粘贴下面这一行：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.14.2/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.15.0/install.sh | sh
 ```
 
 安装完成后运行：
@@ -29,7 +29,7 @@ codex-meter
 打开 PowerShell，粘贴下面这一行：
 
 ```powershell
-irm https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.14.2/install.ps1 | iex
+irm https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.15.0/install.ps1 | iex
 ```
 
 安装后重新打开一个终端，再运行：
@@ -53,7 +53,7 @@ codex-meter --version
 当前版本应显示：
 
 ```text
-codex-meter 0.14.2
+codex-meter 0.15.0
 ```
 
 如果提示找不到命令，请关闭当前终端并重新打开。Linux/macOS 还可以检查：
@@ -267,7 +267,51 @@ codex-meter projects
 
 不添加 `--project` 时始终统计全部项目。
 
-## 8. 按账号标签统计
+## 8. 统计 Mac 上连接的远程服务器
+
+如果你在 Codex 桌面端里通过 SSH 打开远程项目，Codex 实际运行在远程服务器，Rollout 也默认写在远程服务器的 `~/.codex/sessions`。因此旧版本只扫描 Mac 本地时，看不到这部分 Token。
+
+从 0.15.0 开始，可以把 SSH 主机添加为统计数据源。远程服务器不需要安装 Codex Meter，只需能从 Mac 正常 SSH 登录，并且安装了常见的 `tar` 命令。
+
+先确认 Mac 终端能使用与 Codex 桌面端相同的 SSH 别名：
+
+```bash
+ssh devbox
+```
+
+退出远程终端后，在 Mac 上运行：
+
+```bash
+codex-meter remote add devbox
+codex-meter
+```
+
+这里的 `devbox` 应该是 `~/.ssh/config` 中的 Host 别名。添加时 Codex Meter 会先检查连接和远程 Rollout 目录，成功后立即完成第一次同步。
+
+以后打开交互界面时，本地统计会先出现，远程同步在后台进行，不会阻塞启动。标题会显示类似：
+
+```text
+CODEX METER  ● LOCAL + 1 REMOTE
+REMOTE SOURCES  devbox synced · 2 updated
+```
+
+同步完成后，远程用量会自动合并到 Day、Week、Month、All time、历史、项目、模型和性能统计中。按 `r` 会同时刷新本地记录、所有远程源和周额度。
+
+常用管理命令：
+
+```bash
+codex-meter remote list
+codex-meter remote test devbox
+codex-meter remote sync
+codex-meter remote sync devbox
+codex-meter remote remove devbox
+```
+
+首次同步需要读取已有历史，之后只传输新增或发生变化的 Rollout。原始提示词、回答和推理内容只经过 SSH 内存流解析，不会保存到 Mac 的数据库或临时文件；本地只保留 Token、模型、时间、项目等统计字段。`remote remove` 只停止后续同步，不会删除已经统计的数据。
+
+如果添加失败，先在普通终端解决 `ssh devbox` 的登录、Host Key 或密钥问题。自动同步使用非交互模式，不会在界面背后等待密码输入。
+
+## 9. 按账号标签统计
 
 账号标签默认关闭。它不会自动读取真实账号邮箱或认证信息，而是由你手动设置一个本地名称。
 
@@ -313,7 +357,7 @@ codex-meter account disable
 codex-meter account claim-unassigned personal
 ```
 
-## 9. 不进入交互界面直接查询
+## 10. 不进入交互界面直接查询
 
 ### 某一天
 
@@ -349,7 +393,7 @@ codex-meter summary --period all
 codex-meter --no-color summary --period week
 ```
 
-## 10. 导出统计
+## 11. 导出统计
 
 导出 CSV：
 
@@ -375,7 +419,7 @@ codex-meter export --session SESSION_ID --format json
 
 导出内容是使用和性能元数据，不包含提示词、回复正文或工具输出。
 
-## 11. Network 和抓包功能
+## 12. Network 和抓包功能
 
 ### 查看已经保存的网络记录
 
@@ -435,7 +479,7 @@ codex-meter proxy tls --acknowledge-sensitive \
 
 程序会在 `~/.codex-meter/tls` 创建短期本地 CA 和证书。只在诊断期间信任该 CA，结束后应删除系统中的信任。即使开启此模式，Codex Meter 也不会把请求头、正文、SSE 或 WebSocket 帧写入数据库。
 
-## 12. 可选的实时性能数据
+## 13. 可选的实时性能数据
 
 普通用户只使用 Rollout 历史即可。下面功能用于补充更准确的延迟、吞吐或调用生命周期。
 
@@ -469,7 +513,7 @@ codex-meter app-server ingest FILE
 
 这可以补充精确的单次响应用量、Turn 生命周期、工具类型与时间、reroute 和 compaction 等信息。
 
-## 13. 数据保存在哪里
+## 14. 数据保存在哪里
 
 默认目录：
 
@@ -513,7 +557,7 @@ codex-meter --home /path/to/meter-data
 export CODEX_METER_HOME=/path/to/meter-data
 ```
 
-## 14. 更新和卸载
+## 15. 更新和卸载
 
 ### 更新
 
@@ -539,7 +583,7 @@ Remove-Item "$env:LOCALAPPDATA\Programs\CodexMeter\bin\codex-meter.exe"
 
 只有确定不再需要任何统计历史时，才手动删除 `~/.codex-meter`。
 
-## 15. 常见问题排查
+## 16. 常见问题排查
 
 ### 看不到周额度
 
@@ -592,7 +636,7 @@ codex-meter doctor
 
 不要上传 `auth.json`、访问令牌、完整 Rollout、提示词或回复正文。
 
-## 16. 从源码运行
+## 17. 从源码运行
 
 需要 Python 3.11 或更高版本：
 
@@ -614,7 +658,7 @@ Windows PowerShell 激活命令：
 
 更完整的构建说明见 [从源码构建](build-from-source.md)。
 
-## 17. 隐私原则
+## 18. 隐私原则
 
 Codex Meter 的设计原则是“统计元数据，不保存内容”。
 

@@ -27,7 +27,7 @@
 
 ![Codex Meter dashboard illustration](docs/assets/codex-meter-hero.png)
 
-Codex Meter turns the local history already written by Codex into an interactive terminal dashboard. It shows where your tokens went, which projects and models used them, how well caching worked, how long responses took, and how much of the active account's seven-day allowance remains.
+Codex Meter turns the history already written by Codex—on this computer or configured SSH hosts—into an interactive terminal dashboard. It shows where your tokens went, which projects and models used them, how well caching worked, how long responses took, and how much of the active account's seven-day allowance remains.
 
 It is a separate companion application. It does **not** replace or patch the official `codex` command.
 
@@ -45,6 +45,7 @@ The dashboard opens immediately. Live account limits load in the background and 
 |---|---|
 | Live weekly limits | Used/remaining bars and local reset time for every seven-day bucket returned by the active Codex account |
 | Flexible history | Today, current week, current month, all time, plus daily/weekly/monthly history |
+| Remote sessions | Incrementally aggregate Codex Desktop/CLI work performed on SSH hosts into the Mac dashboard |
 | Project scope | All projects by default, with a searchable project picker ordered by recent activity |
 | Model breakdown | Model, reasoning effort, calls, tokens, cache rate, reasoning tokens, and API-equivalent cost |
 | Performance | TTFT, end-to-end latency, output-token speed, tool timing, retries, and compactions when available |
@@ -59,13 +60,13 @@ Standalone installers verify the release checksum, install only for the current 
 ### Linux and macOS
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.14.2/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.15.0/install.sh | sh
 ```
 
 ### Windows PowerShell
 
 ```powershell
-irm https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.14.2/install.ps1 | iex
+irm https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.15.0/install.ps1 | iex
 ```
 
 Open a new terminal and run:
@@ -88,7 +89,7 @@ Run `codex-meter` without a subcommand. Changed rollout files are imported incre
 | `Enter` / `Space` | Open the selected view |
 | `/` | Open the searchable command palette |
 | `Esc` | Close Help, Project, or the command palette |
-| `r` | Refresh local records and live limits |
+| `r` | Refresh local records, configured SSH sources, and live limits |
 | `q` | Quit from the main screen |
 
 Inside the `/` palette and Project filter, printable keys—including `q`—are treated as text. Press `Esc` first to return to the main screen.
@@ -115,6 +116,7 @@ codex-meter history --group month                # monthly history
 codex-meter summary --period week --project NAME # one project
 codex-meter network show                         # saved network timing
 codex-meter doctor                               # capability check
+codex-meter remote add devbox                    # add an SSH history source
 ```
 
 <details>
@@ -127,6 +129,7 @@ codex-meter doctor                               # capability check
 | `codex-meter summary` | Day, week, month, or all-time overview |
 | `codex-meter history` | Usage grouped by day, week, or month |
 | `codex-meter account ...` | Optional manual account labels |
+| `codex-meter remote ...` | Add, test, list, remove, or sync SSH history sources |
 | `codex-meter models` | Model × reasoning-effort totals |
 | `codex-meter sessions` | Recent session totals |
 | `codex-meter projects` | Usage and compactions by project |
@@ -167,6 +170,29 @@ codex-meter account disable
 
 Codex Meter never reads `auth.json`, credentials, access tokens, or email addresses to create these labels. Existing unlabeled sessions stay `Unassigned` unless you explicitly run `codex-meter account claim-unassigned LABEL`.
 
+## Include Codex work from a remote server
+
+When Codex Desktop opens a project through SSH, Codex runs on that server and writes its Rollouts there. Codex Meter 0.15 can stream those records into the dashboard on your Mac; Codex Meter does **not** need to be installed on the server.
+
+First make sure the same SSH alias works in the Mac terminal, then add it once:
+
+```bash
+ssh devbox
+codex-meter remote add devbox
+codex-meter
+```
+
+Use the host alias from `~/.ssh/config`, not a shell command. The first import may take longer; later refreshes inspect file size/time and transfer only changed Rollouts. The dashboard opens immediately while this sync runs in the background. Its title changes to `LOCAL + 1 REMOTE`, and the source row reports completion or an actionable connection error.
+
+```bash
+codex-meter remote list          # configured sources
+codex-meter remote test devbox   # verify SSH and find Rollouts
+codex-meter remote sync          # update all sources now
+codex-meter remote remove devbox # stop future syncs
+```
+
+Remote prompts and responses are parsed from the SSH stream in memory and are never copied into the local database or a temporary Rollout file. Only normalized usage/timing/project metadata is retained. Removing a source stops future updates but deliberately keeps its already imported statistics.
+
 ## Privacy model
 
 Codex Meter stores usage and timing metadata. It intentionally does **not** import or persist:
@@ -180,7 +206,8 @@ It does store identifiers needed for safe aggregation, token counters, model and
 
 ```mermaid
 flowchart LR
-    A[Codex rollout JSONL] --> B[Metadata-only collector]
+    A[Local Codex rollout JSONL] --> B[Metadata-only collector]
+    R[SSH rollout stream] --> B
     C[Optional OTLP / App Server / Network] --> B
     B --> D[Normalize and deduplicate]
     D --> E[(Local SQLite WAL)]

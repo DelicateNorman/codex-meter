@@ -106,6 +106,16 @@ class TuiTests(unittest.TestCase):
         self.assertIn("82% left", rendered)
         self.assertIn("terminal too short", rendered)
 
+    def test_remote_source_status_keeps_weekly_limits_first(self) -> None:
+        rendered = render_overview(
+            {}, [], period="TODAY", color=False, width=100,
+            weekly_quotas=(WeeklyQuota("codex", "Codex", 18, None, 10080),),
+            source_label="LOCAL + 1 REMOTE",
+            source_message="REMOTE SOURCES  devbox synced · 1 updated",
+        )
+        self.assertIn("CODEX METER  ● LOCAL + 1 REMOTE", rendered)
+        self.assertLess(rendered.index("ACCOUNT WEEKLY LIMITS"), rendered.index("REMOTE SOURCES"))
+
     def test_dashboard_explains_when_weekly_quota_is_unavailable(self) -> None:
         rendered = render_overview(
             {}, [], period="TODAY", color=False, width=80,

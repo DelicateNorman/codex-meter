@@ -57,7 +57,7 @@ COMMAND_ITEMS = (
     CommandItem("history month", "Show monthly usage history"),
     CommandItem("network", "Show token speed and response latency"),
     CommandItem("project", "Choose one project or all projects"),
-    CommandItem("refresh", "Reload local Codex records"),
+    CommandItem("refresh", "Reload local, remote, and account data"),
     CommandItem("help", "Show keyboard and command help"),
     CommandItem("quit", "Exit Codex Meter"),
 )
@@ -278,12 +278,13 @@ def run_interactive(
                 key = _read_key(fd, timeout=0.1 if poll_updates else None)
                 if key is None:
                     if poll_updates is not None and poll_updates():
+                        _sync_projects(state, list_projects() if list_projects else [])
                         break
                     continue
                 action = handle_key(state, key)
                 if action == "refresh":
                     state.show_help = False
-                    state.message = "Refreshing local Codex records…"
+                    state.message = "Refreshing usage sources…"
                     output_stream.write(
                         render_interactive_screen(
                             state,
@@ -642,7 +643,7 @@ def _help_text(width: int) -> str:
         "  ↑ ↓ ← →   choose a menu item",
         "  Enter/Space open the selected item",
         "  /           type a slash command",
-        "  r           refresh local Codex records",
+        "  r           refresh usage sources and account limits",
         "  Esc         close help or slash commands",
         "  q           quit (except while typing a filter or command)",
         "",

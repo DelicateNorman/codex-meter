@@ -63,6 +63,7 @@ jobs:
                   ([*prefix, "doctor"], 0, None),
                   ([*prefix, "otel", "config"], 0, None),
                   ([*prefix, "network", "show", "--limit", "0"], 0, None),
+                  ([*prefix, "remote", "list"], 0, None),
                   ([*prefix, "app-server", "ingest", "-"], 0, b""),
                   ([*prefix, "proxy", "tls"], 2, None),
               )

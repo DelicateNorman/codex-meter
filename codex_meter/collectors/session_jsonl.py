@@ -9,9 +9,10 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 from codex_meter.models import (
     Confidence,
@@ -40,6 +41,23 @@ _TOOL_END = {
     "mcp_tool_call_end": "mcp",
     "web_search_end": "web_search",
 }
+
+
+class _StreamPath:
+    """Small Path-compatible adapter used for privacy-preserving SSH streams."""
+
+    def __init__(self, stream: TextIO, source_path: str) -> None:
+        self.stream = stream
+        self.source_path = source_path
+
+    def open(self, *_: object, **__: object):
+        return nullcontext(self.stream)
+
+    def resolve(self) -> "_StreamPath":
+        return self
+
+    def __str__(self) -> str:
+        return self.source_path
 
 
 class SessionJsonlCollector(Collector):
@@ -281,6 +299,11 @@ class SessionJsonlCollector(Collector):
             duplicate_usage_events=duplicate_usage,
             capability_names=capabilities,
         )
+
+    def collect_stream(self, stream: TextIO, *, source_path: str) -> ParsedSession:
+        """Parse a rollout stream without writing its raw contents to disk."""
+
+        return self.collect_file(_StreamPath(stream, source_path))  # type: ignore[arg-type]
 
     def _make_call(
         self,

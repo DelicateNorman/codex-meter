@@ -2,6 +2,15 @@
 
 All notable changes to Codex Meter are documented here.
 
+## [0.15.0] - 2026-08-12
+
+- Add configurable SSH sources for Codex Desktop and CLI sessions executed on remote hosts.
+- Stream remote Rollouts directly into the metadata-only collector without saving raw conversations locally.
+- Incrementally transfer only changed remote files and deduplicate sessions/calls across local and remote sources.
+- Open the dashboard immediately while remote history and weekly quotas refresh in parallel.
+- Merge remote usage into day/week/month/all-time, history, project, model, and performance views.
+- Add `remote add`, `list`, `test`, `sync`, and `remove` commands with safe SSH-alias validation.
+
 ## [0.14.2] - 2026-08-12
 
 - Open the interactive dashboard immediately and load live weekly quotas in the background.
@@ -92,6 +101,7 @@ First public Linux release.
 - Versioned API-equivalent pricing with unknown prices shown as `N/A`.
 - One-line, no-sudo Linux installer.
 
+[0.15.0]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.15.0
 [0.14.2]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.14.2
 [0.14.1]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.14.1
 [0.14.0]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.14.0

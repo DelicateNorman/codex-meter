@@ -115,15 +115,36 @@ class Storage:
 
     def file_is_current(self, path: Path) -> bool:
         stat = path.stat()
+        return self.source_is_current(str(path.resolve()), stat.st_size, stat.st_mtime_ns)
+
+    def source_is_current(self, source_path: str, size_bytes: int, mtime_ns: int) -> bool:
         row = self.connection.execute(
             "SELECT size_bytes, mtime_ns FROM import_files WHERE source_path = ?",
-            (str(path.resolve()),),
+            (source_path,),
         ).fetchone()
-        return bool(row and row["size_bytes"] == stat.st_size and row["mtime_ns"] == stat.st_mtime_ns)
+        return bool(row and row["size_bytes"] == size_bytes and row["mtime_ns"] == mtime_ns)
 
-    def import_session(self, parsed: ParsedSession, path: Path) -> tuple[int, int, int]:
+    def import_session(
+        self,
+        parsed: ParsedSession,
+        path: Path | None = None,
+        *,
+        source_path: str | None = None,
+        size_bytes: int | None = None,
+        mtime_ns: int | None = None,
+    ) -> tuple[int, int, int]:
         session = parsed.session
-        stat = path.stat()
+        if path is not None:
+            stat = path.stat()
+            resolved_source = str(path.resolve())
+            resolved_size = stat.st_size
+            resolved_mtime = stat.st_mtime_ns
+        else:
+            if source_path is None or size_bytes is None or mtime_ns is None:
+                raise ValueError("stream imports require source_path, size_bytes, and mtime_ns")
+            resolved_source = source_path
+            resolved_size = size_bytes
+            resolved_mtime = mtime_ns
         inserted_calls = 0
         inserted_turns = 0
         inserted_tools = 0
@@ -317,9 +338,9 @@ class Storage:
                     duplicate_usage_events=excluded.duplicate_usage_events
                 """,
                 (
-                    str(path.resolve()),
-                    stat.st_size,
-                    stat.st_mtime_ns,
+                    resolved_source,
+                    resolved_size,
+                    resolved_mtime,
                     session_id,
                     parsed.malformed_lines,
                     parsed.duplicate_usage_events,

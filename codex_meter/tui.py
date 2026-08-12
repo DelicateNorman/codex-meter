@@ -32,6 +32,8 @@ def render_overview(
     width: int | None = None,
     weekly_quotas: Sequence[WeeklyQuota] | None = None,
     quota_message: str | None = None,
+    source_label: str = "LOCAL",
+    source_message: str | None = None,
 ) -> str:
     color = _supports_color() if color is None else color
     width = max(40, min(width or shutil.get_terminal_size((110, 30)).columns, 132))
@@ -50,7 +52,7 @@ def render_overview(
         return styled(plain, style, panel)
 
     lines.append(styled("╭" + "─" * (inner - 1) + "╮", BLUE))
-    title = f"CODEX METER  ● LOCAL  │  {period}"
+    title = f"CODEX METER  ● {source_label}  │  {period}"
     lines.append(frame(title, CYAN))
     lines.append(styled("├" + "─" * (inner - 1) + "┤", BLUE))
 
@@ -68,6 +70,10 @@ def render_overview(
                 YELLOW,
                 True,
             ))
+        lines.append(styled("├" + "─" * (inner - 1) + "┤", BLUE))
+
+    if source_message:
+        lines.append(frame(source_message, MUTED, True))
         lines.append(styled("├" + "─" * (inner - 1) + "┤", BLUE))
 
     input_tokens = _int(overview.get("input_tokens"))

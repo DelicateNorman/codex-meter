@@ -2,7 +2,7 @@
 set -eu
 
 repository="DelicateNorman/codex-meter"
-version="${CODEX_METER_VERSION:-v0.14.2}"
+version="${CODEX_METER_VERSION:-v0.15.0}"
 bin_dir="${CODEX_METER_BIN_DIR:-$HOME/.local/bin}"
 
 case "$(uname -s)" in

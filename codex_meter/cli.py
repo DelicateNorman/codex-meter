@@ -13,7 +13,14 @@ from typing import Iterable, Mapping, Sequence
 
 from . import __version__
 from .collectors.session_jsonl import SessionJsonlCollector, discover_rollouts
-from .config import initialize_home, load_identity, update_account_identity
+from .config import (
+    initialize_home,
+    load_identity,
+    load_remote_hosts,
+    update_account_identity,
+    update_remote_hosts,
+    validate_remote_host,
+)
 from .interactive import run_interactive
 from .pricing import PricingCatalog
 from .quota import QuotaUnavailable, WeeklyQuota, read_weekly_quotas
@@ -62,6 +69,19 @@ def build_parser() -> argparse.ArgumentParser:
     account_sub.add_parser("list", help="show labels already present in local history")
     account_claim = account_sub.add_parser("claim-unassigned", help="explicitly label all unassigned history for this OS user")
     account_claim.add_argument("label")
+
+    remote = sub.add_parser("remote", help="aggregate Codex history from SSH hosts")
+    remote_sub = remote.add_subparsers(dest="remote_command", required=True)
+    remote_sub.add_parser("list", help="show configured SSH hosts")
+    remote_add = remote_sub.add_parser("add", help="add and verify an SSH config alias")
+    remote_add.add_argument("host", help="host alias from ~/.ssh/config")
+    remote_remove = remote_sub.add_parser("remove", help="stop syncing an SSH host")
+    remote_remove.add_argument("host", help="configured SSH alias")
+    remote_sync = remote_sub.add_parser("sync", help="sync all configured hosts, or one host")
+    remote_sync.add_argument("host", nargs="?", help="optional SSH alias")
+    remote_sync.add_argument("--force", action="store_true", help="parse unchanged remote files again")
+    remote_test = remote_sub.add_parser("test", help="test access to remote Codex history")
+    remote_test.add_argument("host", help="SSH alias to test")
 
     models = sub.add_parser("models", help="show Model × Reasoning Effort aggregates")
     models.add_argument("--date", help="local date in YYYY-MM-DD; omit for all time")
@@ -174,6 +194,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(_identity_status(identity))
         return 0
     identity = load_identity(args.home)
+    remote_hosts = load_remote_hosts(args.home)
     db_path = args.db or args.home / "meter.db"
     catalog = PricingCatalog.bundled(args.home / "pricing.json" if (args.home / "pricing.json").exists() else None)
     with Storage(
@@ -193,6 +214,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _pricing(catalog)
         if args.command == "account":
             return _account(storage, identity, args)
+        if args.command == "remote":
+            return _remote(storage, catalog, args.home, args)
         if args.command == "models":
             rows = storage.model_breakdown(args.date)
             print(render_models(rows, color=not args.no_color and sys.stdout.isatty()))
@@ -212,7 +235,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "waterfall":
             return _waterfall(storage, args.turn_id)
         if args.command == "watch":
-            return _watch(storage, catalog, args, not args.no_color)
+            return _watch(storage, catalog, args, not args.no_color, remote_hosts)
         if args.command == "statusline":
             return _statusline(storage)
         if args.command == "otel":
@@ -230,18 +253,29 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         if args.command in ("summary", "history") and args.refresh:
             _import(storage, catalog, _codex_home() / "sessions", force=False, quiet=True)
+            _sync_remotes(storage, catalog, remote_hosts, quiet=True)
         if args.command == "history":
-            return _history(storage, args.group, args.account, args.project)
+            return _history(storage, args.group, args.account, args.project, remote_hosts)
         if args.command == "summary":
             return _summary(
                 storage, args.period, args.date, args.account, args.project, not args.no_color,
+                remote_hosts,
             )
 
         # The default interactive dashboard and `today` both reflect changed local history.
         if args.command is None or getattr(args, "refresh", False):
             _import(storage, catalog, _codex_home() / "sessions", force=False, quiet=True)
+        if args.command == "today" and args.refresh:
+            _sync_remotes(storage, catalog, remote_hosts, quiet=True)
         if args.command is None and sys.stdin.isatty() and sys.stdout.isatty():
-            return _interactive_dashboard(storage, catalog, color=not args.no_color)
+            return _interactive_dashboard(
+                storage,
+                catalog,
+                remote_hosts=remote_hosts,
+                color=not args.no_color,
+            )
+        if args.command is None:
+            _sync_remotes(storage, catalog, remote_hosts, quiet=True)
         selected_day = date.today().isoformat()
         account_filter = getattr(args, "account", None)
         project_filter = getattr(args, "project", None)
@@ -260,6 +294,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 rows,
                 period=today_label,
                 color=not args.no_color and sys.stdout.isatty(),
+                source_label=(f"LOCAL + {len(remote_hosts)} REMOTE" if remote_hosts else "LOCAL"),
             )
         )
         return 0
@@ -299,6 +334,100 @@ def _import(
             f"{turns} turns, {calls} LLM calls, {tools} tools; "
             f"ignored {duplicates} duplicate usage event(s), {malformed} malformed line(s)."
         )
+    return 1 if failed else 0
+
+
+def _remote(
+    storage: Storage,
+    catalog: PricingCatalog,
+    home: Path,
+    args: argparse.Namespace,
+) -> int:
+    from .remote import RemoteError, list_remote_rollouts
+
+    command = args.remote_command
+    configured = list(load_remote_hosts(home))
+    if command == "list":
+        if not configured:
+            print("No remote sources configured. Add one with: codex-meter remote add <ssh-alias>")
+            return 0
+        print("REMOTE SSH SOURCE")
+        for host in configured:
+            print(f"  {host}")
+        return 0
+
+    if command == "sync" and args.host is None:
+        if not configured:
+            print("No remote sources configured. Add one with: codex-meter remote add <ssh-alias>")
+            return 0
+        return _sync_remotes(storage, catalog, configured, force=args.force, quiet=False)
+
+    try:
+        host = validate_remote_host(args.host)
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 2
+
+    if command == "remove":
+        if host not in configured:
+            print(f"Remote source {host!r} is not configured.", file=sys.stderr)
+            return 1
+        configured.remove(host)
+        update_remote_hosts(home, configured)
+        print(f"Removed remote source {host}. Previously imported metrics remain in history.")
+        return 0
+
+    if command in ("add", "test"):
+        try:
+            files = list_remote_rollouts(host)
+        except RemoteError as error:
+            print(f"Remote check failed: {error}", file=sys.stderr)
+            print(f"Tip: first confirm that `ssh {host}` works without an interactive password prompt.", file=sys.stderr)
+            return 1
+        if command == "test":
+            print(f"Connected to {host}; found {len(files)} Codex Rollout file(s).")
+            return 0
+        if host not in configured:
+            configured.append(host)
+            update_remote_hosts(home, configured)
+        print(f"Added remote source {host}; found {len(files)} Codex Rollout file(s).")
+        print("Syncing metadata now; raw prompts and responses will not be saved locally.")
+
+    return _sync_remotes(
+        storage,
+        catalog,
+        (host,),
+        force=bool(getattr(args, "force", False)),
+        quiet=False,
+    )
+
+
+def _sync_remotes(
+    storage: Storage,
+    catalog: PricingCatalog,
+    hosts: Sequence[str],
+    *,
+    force: bool = False,
+    quiet: bool = False,
+) -> int:
+    from .remote import RemoteError, sync_remote_rollouts
+
+    failed = 0
+    for host in hosts:
+        try:
+            result = sync_remote_rollouts(storage, catalog, host, force=force)
+        except (RemoteError, OSError, ValueError) as error:
+            failed += 1
+            if not quiet:
+                print(f"Remote sync failed: {error}", file=sys.stderr)
+            continue
+        if not quiet:
+            print(
+                f"Synced {host}: imported {result.imported_files}, "
+                f"unchanged {result.skipped_files}, failed {result.failed_files}; "
+                f"{result.inserted_turns} turns, {result.inserted_calls} LLM calls."
+            )
+        failed += int(result.failed_files > 0)
     return 1 if failed else 0
 
 
@@ -350,6 +479,7 @@ def _summary(
     account: str | None,
     project: str | None,
     color: bool,
+    remote_hosts: Sequence[str] = (),
 ) -> int:
     try:
         start, end, label = _period_bounds(period, anchor_text)
@@ -367,6 +497,7 @@ def _summary(
     print(render_overview(
         overview, rows, period=label,
         color=color and sys.stdout.isatty(),
+        source_label=(f"LOCAL + {len(remote_hosts)} REMOTE" if remote_hosts else "LOCAL"),
     ))
     return 0
 
@@ -376,8 +507,11 @@ def _history(
     group: str,
     account: str | None,
     project: str | None,
+    remote_hosts: Sequence[str] = (),
 ) -> int:
     scope = f"Usage history by {group} · OS user {storage.owner_username}"
+    if remote_hosts:
+        scope += f" · local + {len(remote_hosts)} remote"
     if account:
         scope += f" · account {account}"
     if project:
@@ -398,12 +532,21 @@ def _history(
     return 0
 
 
-def _interactive_dashboard(storage: Storage, catalog: PricingCatalog, *, color: bool) -> int:
+def _interactive_dashboard(
+    storage: Storage,
+    catalog: PricingCatalog,
+    *,
+    remote_hosts: Sequence[str] = (),
+    color: bool,
+) -> int:
     weekly_quotas: tuple[WeeklyQuota, ...] = ()
     quota_message: str | None = "ACCOUNT WEEKLY LIMITS  Loading…"
     quota_loading = False
+    remote_message: str | None = "REMOTE SOURCES  Syncing…" if remote_hosts else None
+    remote_loading = False
     quota_lock = threading.Lock()
-    quota_changed = threading.Event()
+    remote_lock = threading.Lock()
+    dashboard_changed = threading.Event()
 
     def load_quota() -> None:
         nonlocal weekly_quotas, quota_message, quota_loading
@@ -419,7 +562,7 @@ def _interactive_dashboard(storage: Storage, catalog: PricingCatalog, *, color: 
                 weekly_quotas = loaded
                 quota_message = None
                 quota_loading = False
-        quota_changed.set()
+        dashboard_changed.set()
 
     def start_quota_refresh(*, notify: bool = True) -> None:
         nonlocal quota_message, quota_loading
@@ -429,20 +572,72 @@ def _interactive_dashboard(storage: Storage, catalog: PricingCatalog, *, color: 
             quota_loading = True
             quota_message = "ACCOUNT WEEKLY LIMITS  Loading…"
         if notify:
-            quota_changed.set()
+            dashboard_changed.set()
         threading.Thread(
             target=load_quota,
             name="codex-meter-weekly-quota",
             daemon=True,
         ).start()
 
-    def consume_quota_update() -> bool:
-        if not quota_changed.is_set():
+    def load_remotes() -> None:
+        nonlocal remote_message, remote_loading
+        from .remote import RemoteError, sync_remote_rollouts
+
+        imported = 0
+        errors: list[str] = []
+        try:
+            with Storage(
+                storage.path,
+                owner_uid=storage.owner_uid,
+                owner_username=storage.owner_username,
+                account_label=storage.account_label,
+            ) as remote_storage:
+                for host in remote_hosts:
+                    try:
+                        result = sync_remote_rollouts(remote_storage, catalog, host)
+                    except (RemoteError, OSError, ValueError) as error:
+                        errors.append(f"{host}: {error}")
+                    else:
+                        imported += result.imported_files
+                        if result.failed_files:
+                            errors.append(f"{host}: {result.failed_files} file(s) failed")
+        except (OSError, ValueError) as error:
+            errors.append(str(error))
+        finally:
+            with remote_lock:
+                if errors:
+                    remote_message = "REMOTE SOURCES  " + " · ".join(errors) + " · press r to retry"
+                else:
+                    names = ", ".join(remote_hosts)
+                    remote_message = f"REMOTE SOURCES  {names} synced · {imported} updated"
+                remote_loading = False
+            dashboard_changed.set()
+
+    def start_remote_refresh(*, notify: bool = True) -> None:
+        nonlocal remote_message, remote_loading
+        if not remote_hosts:
+            return
+        with remote_lock:
+            if remote_loading:
+                return
+            remote_loading = True
+            remote_message = "REMOTE SOURCES  Syncing " + ", ".join(remote_hosts) + "…"
+        if notify:
+            dashboard_changed.set()
+        threading.Thread(
+            target=load_remotes,
+            name="codex-meter-remote-sync",
+            daemon=True,
+        ).start()
+
+    def consume_dashboard_update() -> bool:
+        if not dashboard_changed.is_set():
             return False
-        quota_changed.clear()
+        dashboard_changed.clear()
         return True
 
     start_quota_refresh(notify=False)
+    start_remote_refresh(notify=False)
 
     def content(
         view: str,
@@ -488,6 +683,8 @@ def _interactive_dashboard(storage: Storage, catalog: PricingCatalog, *, color: 
         with quota_lock:
             current_quotas = weekly_quotas
             current_quota_message = quota_message
+        with remote_lock:
+            current_remote_message = remote_message
         return render_overview(
             overview,
             rows,
@@ -496,11 +693,17 @@ def _interactive_dashboard(storage: Storage, catalog: PricingCatalog, *, color: 
             width=width,
             weekly_quotas=current_quotas,
             quota_message=current_quota_message,
+            source_label=(
+                f"LOCAL + {len(remote_hosts)} REMOTE"
+                if remote_hosts else "LOCAL"
+            ),
+            source_message=current_remote_message,
         )
 
     def refresh() -> None:
         result = _import(storage, catalog, _codex_home() / "sessions", force=False, quiet=True)
         start_quota_refresh()
+        start_remote_refresh()
         if result:
             raise OSError("one or more rollout files could not be imported")
 
@@ -508,7 +711,7 @@ def _interactive_dashboard(storage: Storage, catalog: PricingCatalog, *, color: 
         content,
         refresh,
         storage.project_names,
-        consume_quota_update,
+        consume_dashboard_update,
         color=color,
     )
 
@@ -684,11 +887,18 @@ def _waterfall(storage: Storage, turn_id: str) -> int:
     return 0
 
 
-def _watch(storage: Storage, catalog: PricingCatalog, args: argparse.Namespace, color: bool) -> int:
+def _watch(
+    storage: Storage,
+    catalog: PricingCatalog,
+    args: argparse.Namespace,
+    color: bool,
+    remote_hosts: Sequence[str] = (),
+) -> int:
     iteration = 0
     try:
         while args.iterations is None or iteration < max(0, args.iterations):
             _import(storage, catalog, _codex_home() / "sessions", force=False, quiet=True)
+            _sync_remotes(storage, catalog, remote_hosts, quiet=True)
             selected_day = date.today().isoformat()
             if sys.stdout.isatty() and iteration:
                 print("\033[2J\033[H", end="")
@@ -696,6 +906,7 @@ def _watch(storage: Storage, catalog: PricingCatalog, args: argparse.Namespace, 
                 dict(storage.overview(selected_day)),
                 [dict(row) for row in storage.model_breakdown(selected_day)],
                 period=f"LIVE · {selected_day}", color=color and sys.stdout.isatty(),
+                source_label=(f"LOCAL + {len(remote_hosts)} REMOTE" if remote_hosts else "LOCAL"),
             ))
             iteration += 1
             if args.iterations is None or iteration < args.iterations:
