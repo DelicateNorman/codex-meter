@@ -35,7 +35,7 @@ try {
     $newHash = (Get-FileHash -Algorithm SHA256 (Join-Path $AssetDir $AssetName)).Hash
     $env:CODEX_METER_HOME = $historyHome
     & $installer -BaseUrl $AssetDir -BinDir $binDir
-    $resolved = (Get-Command codex-meter -CommandType Application).Source
+    $resolved = @(Get-Command codex-meter -CommandType Application)[0].Source
     if ($resolved -ne $destination) { throw "installer did not put the Rust binary first on PATH: $resolved" }
     if (($env:Path -split ";")[0] -ne $binDir) { throw "process PATH does not start with install directory" }
     if (([Environment]::GetEnvironmentVariable("Path", "User") -split ";")[0] -ne $binDir) {
