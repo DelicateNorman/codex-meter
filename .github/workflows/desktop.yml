@@ -67,6 +67,9 @@ jobs:
       - name: Install frontend dependencies
         working-directory: desktop
         run: npm ci
+      - name: Build frontend for Tauri macros
+        working-directory: desktop
+        run: npm run build
       - name: Check desktop Rust bridge
         run: cargo clippy --manifest-path desktop/src-tauri/Cargo.toml --all-targets --locked -- -D warnings
       - name: Build native app and DMG
