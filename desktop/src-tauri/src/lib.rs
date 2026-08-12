@@ -119,12 +119,11 @@ async fn refresh_all(app: AppHandle, force: bool) -> CommandResult<RefreshOutcom
                 &host,
                 force,
                 move |progress| {
-                    let percent = if progress.total_source_bytes == 0 {
-                        100
-                    } else {
-                        progress.completed_source_bytes.saturating_mul(100)
-                            / progress.total_source_bytes
-                    };
+                    let percent = progress
+                        .completed_source_bytes
+                        .saturating_mul(100)
+                        .checked_div(progress.total_source_bytes)
+                        .unwrap_or(100);
                     emit(
                         &progress_app,
                         RefreshProgress {
