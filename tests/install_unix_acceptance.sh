@@ -31,7 +31,7 @@ new_hash="$(shasum -a 256 "$asset_dir/$asset_name" | awk '{print $1}')"
 
 HOME="$os_home" CODEX_METER_HOME="$history_home" \
 CODEX_METER_BASE_URL="$asset_dir" CODEX_METER_BIN_DIR="$bin_dir" \
-    sh "$repository_root/install.sh"
+    sh -s -- < "$repository_root/install.sh"
 
 test "$(shasum -a 256 "$bin_dir/codex-meter" | awk '{print $1}')" = "$new_hash"
 test "$(shasum -a 256 "$bin_dir/codex-meter.previous" | awk '{print $1}')" = "$old_hash"
@@ -44,7 +44,7 @@ cp "$asset_dir/SHA256SUMS" "$test_root/tampered/SHA256SUMS"
 printf '\000' >> "$test_root/tampered/$asset_name"
 if HOME="$os_home" CODEX_METER_HOME="$history_home" \
    CODEX_METER_BASE_URL="$test_root/tampered" CODEX_METER_BIN_DIR="$bin_dir" \
-       sh "$repository_root/install.sh" >/dev/null 2>&1; then
+       sh -s -- < "$repository_root/install.sh" >/dev/null 2>&1; then
     echo "tampered release unexpectedly installed" >&2
     exit 1
 fi
@@ -53,7 +53,7 @@ python3 "$repository_root/tests/release_history_guard.py" manifest \
     --home "$history_home" --expect "$test_root/history-before.json"
 
 HOME="$os_home" CODEX_METER_HOME="$history_home" CODEX_METER_BIN_DIR="$bin_dir" \
-    sh "$repository_root/install.sh" --rollback
+    sh -s -- --rollback < "$repository_root/install.sh"
 test "$(shasum -a 256 "$bin_dir/codex-meter" | awk '{print $1}')" = "$old_hash"
 test "$(shasum -a 256 "$bin_dir/codex-meter.previous" | awk '{print $1}')" = "$new_hash"
 python3 "$repository_root/tests/release_history_guard.py" manifest \
@@ -61,7 +61,7 @@ python3 "$repository_root/tests/release_history_guard.py" manifest \
 
 HOME="$os_home" CODEX_METER_HOME="$history_home" \
 CODEX_METER_BASE_URL="$asset_dir" CODEX_METER_BIN_DIR="$bin_dir" \
-    sh "$repository_root/install.sh" >/dev/null
+    sh -s -- < "$repository_root/install.sh" >/dev/null
 python3 "$repository_root/tests/release_history_guard.py" database \
     --home "$history_home" --output "$test_root/database-before.json"
 "$bin_dir/codex-meter" --home "$history_home" --no-color summary --period all >/dev/null
