@@ -63,11 +63,11 @@ def run_posix(binary: Path, home: Path, codex_home: Path) -> None:
         os.write(master, b"/")
         wait_for(read_chunk, "Commands")
         os.write(master, b"q")
-        time.sleep(0.1)
+        wait_for(read_chunk, "/q▌")
         if process.poll() is not None:
             raise AssertionError("q exited while the slash palette was open")
         os.write(master, b"\x1b")
-        time.sleep(0.15)
+        wait_for(read_chunk, "Scope · All projects")
         os.write(master, b"q")
         process.wait(timeout=8)
         if process.returncode != 0:
@@ -102,11 +102,11 @@ def run_windows(binary: Path, home: Path, codex_home: Path) -> None:
         process.write("/")
         wait_for(read_chunk, "Commands")
         process.write("q")
-        time.sleep(0.1)
+        wait_for(read_chunk, "/q▌")
         if not process.isalive():
             raise AssertionError("q exited while the slash palette was open")
         process.write("\x1b")
-        time.sleep(0.15)
+        wait_for(read_chunk, "Scope · All projects")
         process.write("q")
         deadline = time.monotonic() + 8
         while process.isalive() and time.monotonic() < deadline:
