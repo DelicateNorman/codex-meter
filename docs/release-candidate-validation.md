@@ -1,8 +1,8 @@
-# Rust 0.16 release-candidate validation
+# Rust 0.16 release validation
 
-Validation date: 2026-08-12  
+Validation date: 2026-08-13
 Candidate branch: `main`
-Current beta commit: `81a0292ae56a475f3920b34bff4459be8c4c58ed`
+Validated beta commit: `81a0292ae56a475f3920b34bff4459be8c4c58ed`
 
 ## Outcome
 
@@ -109,10 +109,12 @@ upgrade, checksum rejection, and rollback on every release runner. Its remote
 filter parity benchmark used isolated Meter homes and did not modify the live
 history.
 
-## Remaining stable-release checks
+## Post-release follow-up checks
 
 - Record a short manual interaction in macOS Terminal and Windows Terminal; add a WSL smoke check.
 - Run privileged live `tcpdump` capture on an approved machine. Parser behavior and safe failure are already automated.
 
-Until those checks are complete, this evidence supports a beta/prerelease, not an
-unqualified stable replacement of v0.15.
+These manual recordings and the optional privileged capture remain worthwhile
+supplementary evidence. For v0.16.0, the formal release gate is the completed
+four-platform native terminal, privacy, installer, history-preservation,
+differential, real-SSH, and public-download matrix documented above.

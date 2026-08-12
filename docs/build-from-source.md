@@ -1,16 +1,16 @@
 # Build from source
 
-> The stable v0.15 release is built from Python. The `rust-rewrite` branch is
-> the next implementation and can be built with the stable Rust toolchain.
+Codex Meter 0.16 and later are built from Rust. The Python 0.15 implementation
+remains in the repository as a compatibility reference and regression oracle;
+official 0.16 release assets use the Rust executable.
 
-## Rust rewrite (rust-rewrite branch)
+## Current Rust version
 
 Install [Rust with rustup](https://rustup.rs/), then run:
 
 ```bash
 git clone https://github.com/DelicateNorman/codex-meter.git
 cd codex-meter
-git switch rust-rewrite
 cargo test --all-targets --locked
 cargo build --release --locked
 ./target/release/codex-meter --no-color demo
@@ -22,15 +22,18 @@ On Windows PowerShell, the executable is
 runtime. It deliberately reuses `~/.codex-meter/config.toml`, `pricing.json`,
 and `meter.db`, so existing history is preserved.
 
-## Stable Python v0.15 source build
+## Legacy Python v0.15 reference
 
-Codex Meter supports Linux, macOS, and native Windows with Python 3.11 or newer and Git. The runtime itself has no third-party Python dependencies.
+Use this section only when reproducing the old v0.15 implementation or running
+the differential test suite. It supports Python 3.11 or newer and Git and has no
+third-party runtime dependencies.
 
 ## Linux and macOS
 
 ```bash
 git clone https://github.com/DelicateNorman/codex-meter.git
 cd codex-meter
+git switch --detach v0.15.0
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
@@ -44,6 +47,7 @@ codex-meter
 ```powershell
 git clone https://github.com/DelicateNorman/codex-meter.git
 Set-Location codex-meter
+git switch --detach v0.15.0
 py -3 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
@@ -56,7 +60,7 @@ If PowerShell blocks the activation script, run `Set-ExecutionPolicy -Scope Proc
 
 The editable installation runs directly from the cloned source tree. Leave it with `deactivate`.
 
-## Run without installing
+## Run legacy Python without installing
 
 From the repository root:
 
@@ -67,7 +71,7 @@ python3 -m codex_meter
 
 On Windows, use `py -3` in place of `python3` when needed.
 
-## Build a wheel
+## Build a legacy Python wheel
 
 ```bash
 python -m pip install build
@@ -77,7 +81,7 @@ python -m pip install dist/codex_meter-*.whl
 
 Build outputs are written to `dist/` and are intentionally excluded from Git.
 
-## Build a standalone executable
+## Build a legacy Python standalone executable
 
 PyInstaller must run on the target operating system; it does not cross-compile. From an activated environment:
 
@@ -89,7 +93,10 @@ pyinstaller --noconfirm --clean --onefile --name codex-meter \
   packaging/codex_meter_entry.py
 ```
 
-The result is `dist/codex-meter` on Linux/macOS or `dist/codex-meter.exe` on Windows. Tagged GitHub releases build and smoke-test Linux x86_64, macOS arm64/x86_64, and Windows x86_64 executables automatically.
+The result is `dist/codex-meter` on Linux/macOS or `dist/codex-meter.exe` on
+Windows. Current tagged GitHub releases instead build and test the Rust
+executables automatically on Linux x86_64, macOS arm64/x86_64, and Windows
+x86_64.
 
 ## Platform notes
 

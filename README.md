@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.0-beta.3"><img alt="Latest beta" src="https://img.shields.io/badge/release-v0.16.0--beta.3-0a84ff?style=flat-square"></a>
+  <a href="https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.0"><img alt="Latest release" src="https://img.shields.io/badge/release-v0.16.0-0a84ff?style=flat-square"></a>
   <a href="https://github.com/DelicateNorman/codex-meter/actions/workflows/ci.yml"><img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/DelicateNorman/codex-meter/ci.yml?branch=main&style=flat-square&label=tests&color=38d996"></a>
   <img alt="Platforms" src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-38bdf8?style=flat-square">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-f7c948?style=flat-square"></a>
@@ -30,9 +30,9 @@
 
 Codex Meter turns the history already written by Codex—on this computer or configured SSH hosts—into an interactive terminal dashboard. It shows where your tokens went, which projects and models used them, how well caching worked, how long responses took, and how much of the active account's seven-day allowance remains.
 
-> **Rust beta:** v0.16.0-beta.3 replaces the Python runtime with one small native
-> executable while keeping the v0.15 database and configuration format. Existing
-> `~/.codex-meter` history is preserved during installation, upgrade, and rollback.
+Version 0.16.0 replaces the Python runtime with one small native Rust executable
+while keeping the v0.15 database and configuration format. Existing
+`~/.codex-meter` history is preserved during installation, upgrade, and rollback.
 
 It is a separate companion application. It does **not** replace or patch the official `codex` command.
 
@@ -65,13 +65,13 @@ Standalone installers verify the release checksum, install only for the current 
 ### Linux and macOS
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.0-beta.3/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.0/install.sh | sh
 ```
 
 ### Windows PowerShell
 
 ```powershell
-irm https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.0-beta.3/install.ps1 | iex
+irm https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.0/install.ps1 | iex
 ```
 
 Open a new terminal and run:

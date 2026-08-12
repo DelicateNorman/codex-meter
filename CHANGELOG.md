@@ -2,6 +2,38 @@
 
 All notable changes to Codex Meter are documented here.
 
+## [0.16.0] - 2026-08-13
+
+### Added
+
+- Ship the complete application as a small native Rust executable for Linux
+  x86_64, macOS arm64/x86_64, and Windows x86_64.
+- Add live seven-day account quota bars, project-scoped reports, searchable
+  keyboard navigation, network/performance views, and SSH history sources.
+- Show live file, percentage, and source-byte progress during remote sync.
+
+### Changed
+
+- Filter Rollouts on Python 3-capable SSH hosts before transfer so prompts,
+  responses, reasoning, command text, and tool output do not cross the
+  connection; transfer only a compressed statistics allowlist.
+- Preserve the v0.15 database/configuration format and all history during
+  install, upgrade, checksum rejection, and rollback.
+- Make dashboard startup and quota/remote loading non-blocking.
+- Support selecting an explicit release with Unix installer `--version`.
+
+### Fixed
+
+- Render raw-terminal rows correctly in macOS Terminal and preserve modal key
+  behavior across Linux/macOS PTYs and Windows ConPTY.
+
+### Verified
+
+- Pass Rust tests, strict Clippy, Python/Rust differential tests, native
+  terminal interaction, and complete release installation on all four targets.
+- Reduce a live 60-file, 678 MiB remote history to a 2.17 MiB metadata stream
+  while retaining exact parity across more than 21,000 exported call rows.
+
 ## [0.16.0-beta.3] - 2026-08-12
 
 ### Added
@@ -142,6 +174,7 @@ First public Linux release.
 - Versioned API-equivalent pricing with unknown prices shown as `N/A`.
 - One-line, no-sudo Linux installer.
 
+[0.16.0]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.0
 [0.16.0-beta.3]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.0-beta.3
 [0.16.0-beta.2]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.0-beta.2
 [0.16.0-beta.1]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.0-beta.1

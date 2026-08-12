@@ -2,17 +2,17 @@
 
 This document is the acceptance specification for rewriting Codex Meter 0.15.0 in Rust. The Python implementation at tag `v0.15.0` is authoritative unless a later product decision explicitly changes behavior. Every item begins as `TODO`; an item may be marked complete only after its stated Rust verification passes.
 
-## Verification snapshot (2026-08-12)
+## Verification snapshot (2026-08-13)
 
-The Rust implementation has merged into `main` and is prepared as the
-v0.16.0-beta.3 candidate. The checkboxes below remain the stricter stable-release
-gate; they are deliberately not mass-checked merely because the implementation
-compiles.
+The Rust implementation has merged into `main` and is prepared for the v0.16.0
+release. The detailed checkboxes below remain an auditable specification and
+follow-up inventory; they are deliberately not mass-checked without individual
+evidence.
 
-| Area | Evidence recorded for the beta candidate |
+| Area | Evidence recorded for v0.16.0 |
 |---|---|
 | Command and data surface | All 28 Python top-level commands and their nested subcommands/options are present in the Rust parser. Empty-state command smoke tests pass on every supported target. |
-| Rust tests | 76 tests pass with both current stable Rust and the declared minimum Rust 1.85 toolchain. `cargo fmt --check` and strict Clippy (`-D warnings`) pass. |
+| Rust tests | 79 tests pass with both current stable Rust and the declared minimum Rust 1.85 toolchain. `cargo fmt --check` and strict Clippy (`-D warnings`) pass. |
 | Python regression | All 71 Python tests pass while the Rust candidate is present, including the automated Python/Rust database and JSON/CSV export differential fixture. |
 | Full-history differential | A 0.63 GiB local history (60 Rollouts) produced exactly 1,712 turns, 20,643 LLM calls, 1,926 tools, 12 model groups, 50 sessions, 13 project groups, and matching exports in both implementations. |
 | Existing-home compatibility | A backup of the populated v0.15 home opened without migration loss; all read/report/export commands passed, table counts were unchanged, and SQLite integrity remained `ok`. A final isolated upgrade and rollback pointed at the live `~/.codex-meter`; an exact SHA-256 manifest of every history file was unchanged after both operations. |
@@ -23,13 +23,13 @@ compiles.
 | Performance | The optimized Linux executable is about 5.7 MiB. The full first import measured 2.10 s / 46 MiB versus Python's 3.51 s / 73 MiB; unchanged startup was below 10 ms / 5 MiB versus about 90 ms / 22 MiB. |
 | Native CI | [GitHub Actions run 31606754311](https://github.com/DelicateNorman/codex-meter/actions/runs/31606754311) passed formatting, strict Clippy, all 76 Rust tests, release builds, and command smoke tests on Linux x86_64, macOS arm64, macOS x86_64, and Windows x86_64. Linux also passed the Python/Rust differential fixture. |
 
-The beta tag workflow repeats installation and rollback from its public GitHub
-Release URL after publication. Still reserved for the stable-release gate are
-privileged live `tcpdump` capture (the parser and safe failure path are covered)
-and recorded manual Windows Terminal, macOS Terminal, and WSL interaction. The
-native automated terminal sessions are meaningful platform tests, but are not
-represented as a manual GUI-terminal recording. The beta therefore does not yet
-claim stable-release status.
+The tag workflow repeats installation and rollback from its public GitHub
+Release URL after publication. Privileged live `tcpdump` capture and recorded
+manual Windows Terminal/WSL interaction remain useful follow-up validation; the
+parser, safe failure path, automated native Linux/macOS PTYs, Windows ConPTY,
+and a user-reported macOS Terminal regression/fix have already been exercised.
+The product decision for v0.16.0 accepts that automated platform evidence as the
+formal release gate without representing it as a manual recording.
 
 ## Parity rules
 
