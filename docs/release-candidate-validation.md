@@ -1,0 +1,77 @@
+# Rust 0.16 release-candidate validation
+
+Validation date: 2026-08-12  
+Candidate branch: `rust-rewrite`  
+Candidate commit: `bc94eb969192eb3559082c657a77fabec3075c26`
+
+## Outcome
+
+The Rust candidate passed the automated release rehearsal on Linux x86_64,
+macOS arm64, macOS x86_64, and Windows x86_64. The release workflow and normal
+Rust workflow were both green:
+
+- [release installation and artifact run](https://github.com/DelicateNorman/codex-meter/actions/runs/31606754285)
+- [format, Clippy, tests, differential fixture, and command-smoke run](https://github.com/DelicateNorman/codex-meter/actions/runs/31606754311)
+
+No v0.16 tag or public release was created by this rehearsal.
+
+## Per-platform release rehearsal
+
+Each native runner performed the following operations with its own executable:
+
+1. Build the optimized Rust executable and run `--version` and `demo`.
+2. Generate a platform `SHA256SUMS` entry.
+3. Download the matching executable from the real public v0.15.0 release.
+4. Seed a real v0.15 database and preservation canary with that executable.
+5. Install the Rust candidate through the one-line script entry point.
+6. Verify that the installed file is the candidate and `.previous` is v0.15.
+7. Append a byte to a copied candidate and confirm checksum rejection leaves the installed executable unchanged.
+8. Roll back and verify that v0.15 is restored while the Rust file becomes `.previous`.
+9. Upgrade again; run summary, history, export, and doctor against the v0.15 database; verify SQLite integrity, row counts, and usage aggregates remain unchanged.
+10. Compare an exact SHA-256 manifest of every Meter-home file before and after installation and rollback.
+
+The four files were assembled into one artifact with a combined checksum file.
+That artifact was downloaded again on the development host; all four checksums,
+file formats, names, and the Linux executable self-check passed.
+
+## Native terminal input
+
+Linux and both macOS runners used native pseudo-terminals. Windows used a native
+ConPTY session. Each release executable was opened interactively at 120×30 and
+verified the following sequence:
+
+- the dashboard selects Today;
+- Right selects Week;
+- `/` opens the English command palette;
+- `q` is entered as text and does not quit;
+- `Esc` returns to the main dashboard;
+- `q` then exits successfully.
+
+This is a real automated terminal session on each operating system. It is not a
+manual recording from Terminal.app or Windows Terminal.
+
+## Real SSH synchronization
+
+A configured external OpenSSH alias was tested with a temporary metadata-only
+Rollout. Discovery found one file, the first sync imported one session, one turn,
+one call, and 110 tokens, and the second sync skipped the unchanged file. Removing
+the source preserved the imported statistics. No raw Rollout file was written to
+the local Meter home. The exact temporary remote file and its test directory were
+removed after verification.
+
+## Live history preservation
+
+The final downloaded candidate was installed and rolled back in an isolated bin
+directory while `CODEX_METER_HOME` pointed to the development user's real
+`~/.codex-meter`. SHA-256 hashes for every file under that directory matched
+exactly before installation, after upgrade, and after rollback. The real installed
+`~/.local/bin/codex-meter` was not replaced and remains v0.14.2.
+
+## Remaining stable-release checks
+
+- Create a v0.16 prerelease and repeat installation through its public GitHub release URL.
+- Record a short manual interaction in macOS Terminal and Windows Terminal; add a WSL smoke check.
+- Run privileged live `tcpdump` capture on an approved machine. Parser behavior and safe failure are already automated.
+
+Until those checks are complete, this evidence supports a beta/prerelease, not an
+unqualified stable replacement of v0.15.

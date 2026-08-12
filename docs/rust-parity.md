@@ -14,18 +14,21 @@ not mass-checked merely because the implementation compiles.
 | Rust tests | 76 tests pass with both current stable Rust and the declared minimum Rust 1.85 toolchain. `cargo fmt --check` and strict Clippy (`-D warnings`) pass. |
 | Python regression | All 71 Python tests pass while the Rust candidate is present, including the automated Python/Rust database and JSON/CSV export differential fixture. |
 | Full-history differential | A 0.63 GiB local history (60 Rollouts) produced exactly 1,712 turns, 20,643 LLM calls, 1,926 tools, 12 model groups, 50 sessions, 13 project groups, and matching exports in both implementations. |
-| Existing-home compatibility | A backup of the populated v0.15 home opened without migration loss; all read/report/export commands passed, table counts were unchanged, and SQLite integrity remained `ok`. |
+| Existing-home compatibility | A backup of the populated v0.15 home opened without migration loss; all read/report/export commands passed, table counts were unchanged, and SQLite integrity remained `ok`. A final isolated upgrade and rollback pointed at the live `~/.codex-meter`; an exact SHA-256 manifest of every history file was unchanged after both operations. |
 | Protocols and privacy | Real loopback OTLP logs/metrics/traces, App Server ingest/stdio proxy, HTTP and TLS reverse proxy, CONNECT, and TLS probe paths passed. Canary prompts, responses, headers, credentials, tool bodies, and proxy bodies were absent from SQLite, WAL, and persisted files. |
-| Interactive behavior | A real Linux PTY verified non-blocking first paint, quota/remote redraw, refresh, slash/project modal semantics, recent-project ordering, Unicode input, short layouts, and terminal restoration. |
+| Interactive behavior | A real Linux PTY verified non-blocking first paint, quota/remote redraw, refresh, slash/project modal semantics, recent-project ordering, Unicode input, short layouts, and terminal restoration. Native Linux/macOS PTYs and Windows ConPTY additionally verified arrows, slash input, modal `q`, `Esc`, normal quit, and clean process exit from each release executable. |
+| Installer and artifacts | [Release-candidate run 31606754285](https://github.com/DelicateNorman/codex-meter/actions/runs/31606754285) built all four standalone files, downloaded the matching real v0.15 release file, installed the Rust candidate through the one-line script entry point, rejected a deliberately tampered asset, rolled back, upgraded again, and preserved an exact history manifest. The assembled artifact's four SHA-256 entries were then downloaded and reverified locally. |
+| Real SSH | A configured external OpenSSH alias completed discovery, first streaming import, unchanged-file incremental sync, and source removal. The metadata-only fixture produced one session/turn/call and 110 tokens; no raw Rollout was saved locally, imported history survived source removal, and the exact temporary remote file was deleted. |
 | Performance | The optimized Linux executable is about 5.7 MiB. The full first import measured 2.10 s / 46 MiB versus Python's 3.51 s / 73 MiB; unchanged startup was below 10 ms / 5 MiB versus about 90 ms / 22 MiB. |
-| Native CI | [GitHub Actions run 31593586758](https://github.com/DelicateNorman/codex-meter/actions/runs/31593586758) passed formatting, Clippy, the then-current 61-test suite, release build, and command smoke on Linux x86_64, macOS arm64, macOS x86_64, and Windows x86_64. Linux also ran the cross-implementation differential test. The 76-test final audit suite is covered by the subsequent branch CI run. |
+| Native CI | [GitHub Actions run 31606754311](https://github.com/DelicateNorman/codex-meter/actions/runs/31606754311) passed formatting, strict Clippy, all 76 Rust tests, release builds, and command smoke tests on Linux x86_64, macOS arm64, macOS x86_64, and Windows x86_64. Linux also passed the Python/Rust differential fixture. |
 
-Still reserved for the stable-release gate: installer/checksum conversion and a
-tagged artifact dry run; a real external SSH alias (none is configured on the
-verification host); privileged live `tcpdump` capture (the parser and safe
-failure path are covered); and recorded manual Windows-console/WSL interaction.
-The alpha branch therefore does not replace `main`, alter the stable installer,
-or create a release tag.
+Still reserved for the stable-release gate: installing through a public tagged
+v0.16 release URL instead of an Actions artifact; privileged live `tcpdump`
+capture (the parser and safe failure path are covered); and recorded manual
+Windows Terminal, macOS Terminal, and WSL interaction. The native automated
+terminal sessions are meaningful platform tests, but are not represented as a
+manual GUI-terminal recording. The alpha branch therefore does not replace
+`main` or create a release tag.
 
 ## Parity rules
 

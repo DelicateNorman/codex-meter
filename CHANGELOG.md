@@ -8,6 +8,8 @@ All notable changes to Codex Meter are documented here.
 - Keep interactive first paint non-blocking while weekly limits and SSH sources update in background workers.
 - Port Rollout, quota, OTLP, App Server, network capture, CONNECT, reverse proxy, TLS diagnostics, export, and doctor functionality.
 - Add a Linux/macOS/Windows Rust CI matrix, release-candidate artifact workflow, and automated Python/Rust database/export differential test.
+- Make checksum-verified upgrades transactional, retain the previous executable for rollback, and leave the Meter history directory outside the install transaction.
+- Exercise one-line install, v0.15 upgrade, tamper rejection, rollback, history preservation, and native terminal input on all four release targets.
 - Validate the complete local 0.63 GiB Rollout history: 60 files, 1,712 turns, 20,643 calls, and 1,926 tools matched Python exactly.
 - Reduce the optimized Linux executable to about 5.7 MiB and improve no-op startup from roughly 90 ms to below the timer's 10 ms resolution on the development machine.
 
