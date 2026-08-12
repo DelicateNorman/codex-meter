@@ -261,11 +261,16 @@ class LiveObservabilityTests(unittest.TestCase):
                 "openssl", "verify", "-CAfile", str(paths["ca_cert"]),
                 str(paths["leaf_cert"]),
             ],
-            check=True,
+            check=False,
             capture_output=True,
             text=True,
-        ).stdout
-        self.assertIn("OK", verification)
+        )
+        self.assertEqual(
+            verification.returncode,
+            0,
+            verification.stdout + verification.stderr,
+        )
+        self.assertIn("OK", verification.stdout)
         self.assertEqual(
             paths["leaf_cert"].read_text(encoding="utf-8").count("BEGIN CERTIFICATE"),
             2,
