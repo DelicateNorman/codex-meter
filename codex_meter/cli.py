@@ -164,6 +164,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    _configure_windows_stdio()
     args = build_parser().parse_args(argv)
     if args.command == "demo":
         print(_demo(not args.no_color))
@@ -843,3 +844,23 @@ def _meter_home() -> Path:
 
 def _codex_home() -> Path:
     return Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
+
+
+def _configure_windows_stdio() -> None:
+    """Use UTF-8 consistently in native Windows terminals and redirected CI output."""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.kernel32.SetConsoleOutputCP(65001)
+        ctypes.windll.kernel32.SetConsoleCP(65001)
+    except (AttributeError, OSError):
+        pass
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                pass

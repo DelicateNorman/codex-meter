@@ -270,11 +270,15 @@ class LiveObservabilityTests(unittest.TestCase):
         wrap_server_tls(proxy, paths["leaf_cert"], paths["leaf_key"])
         proxy_thread = _serve(proxy)
         context = ssl.create_default_context(cafile=str(paths["ca_cert"]))
+        opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({}),
+            urllib.request.HTTPSHandler(context=context),
+        )
         request = urllib.request.Request(
             f"https://localhost:{proxy.server_address[1]}/v1/responses",
             data=b"TLS TOP SECRET REQUEST", headers={"Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(request, context=context, timeout=3) as response:
+        with opener.open(request, timeout=3) as response:
             self.assertIn(b"TOP SECRET RESPONSE", response.read())
         proxy.shutdown()
         upstream.shutdown()
