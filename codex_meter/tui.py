@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+import unicodedata
 from typing import Mapping, Sequence
 
 
@@ -38,8 +39,9 @@ def render_overview(
         return f"{PANEL if panel else BG}{style}{text}{RESET}"
 
     def frame(text: str = "", style: str = LIGHT, panel: bool = False) -> str:
-        clipped = text[: inner - 2]
-        plain = f"│ {clipped:<{inner - 2}} │"
+        clipped = _fit_display(text, inner - 2)
+        padding = " " * max(0, inner - 2 - _display_width(clipped))
+        plain = f"│ {clipped}{padding} │"
         return styled(plain, style, panel)
 
     lines.append(styled("╭" + "─" * (inner - 1) + "╮", BLUE))
@@ -185,8 +187,9 @@ def render_network(
         return f"{PANEL if panel else BG}{style}{text}{RESET}"
 
     def frame(text: str = "", style: str = LIGHT, panel: bool = False) -> str:
-        clipped = text[: inner - 2]
-        return styled(f"│ {clipped:<{inner - 2}} │", style, panel)
+        clipped = _fit_display(text, inner - 2)
+        padding = " " * max(0, inner - 2 - _display_width(clipped))
+        return styled(f"│ {clipped}{padding} │", style, panel)
 
     ttft = [float(row["ttft_ms"]) for row in rows if row.get("ttft_ms") is not None]
     e2e = [float(row["e2e_ms"]) for row in rows if row.get("e2e_ms") is not None]
@@ -315,6 +318,29 @@ def _duration(value: object) -> str:
 
 def _int(value: object) -> int:
     return int(value or 0)
+
+
+def _fit_display(value: str, width: int) -> str:
+    result: list[str] = []
+    used = 0
+    for character in value:
+        cell_width = 0 if unicodedata.combining(character) else (
+            2 if unicodedata.east_asian_width(character) in ("F", "W") else 1
+        )
+        if used + cell_width > width:
+            break
+        result.append(character)
+        used += cell_width
+    return "".join(result)
+
+
+def _display_width(value: str) -> int:
+    return sum(
+        0 if unicodedata.combining(character) else (
+            2 if unicodedata.east_asian_width(character) in ("F", "W") else 1
+        )
+        for character in value
+    )
 
 
 def _supports_color() -> bool:

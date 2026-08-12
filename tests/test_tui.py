@@ -6,6 +6,7 @@ import unittest
 from codex_meter.interactive import (
     COMMAND_ITEMS,
     InteractiveState,
+    _display_width,
     _project_picker_text,
     _read_key,
     _sync_projects,
@@ -13,6 +14,7 @@ from codex_meter.interactive import (
     parse_slash_command,
     render_interactive_screen,
 )
+from codex_meter.tui import _display_width as tui_display_width
 from codex_meter.tui import render_history, render_network, render_overview
 
 
@@ -42,6 +44,16 @@ class TuiTests(unittest.TestCase):
             os.write(write_fd, b"\x1b[C\r")
             self.assertEqual(_read_key(read_fd), "right")
             self.assertEqual(_read_key(read_fd), "enter")
+        finally:
+            os.close(read_fd)
+            os.close(write_fd)
+
+    def test_key_reader_accepts_multibyte_utf8_input(self) -> None:
+        read_fd, write_fd = os.pipe()
+        try:
+            os.write(write_fd, "项目".encode("utf-8"))
+            self.assertEqual(_read_key(read_fd), "项")
+            self.assertEqual(_read_key(read_fd), "目")
         finally:
             os.close(read_fd)
             os.close(write_fd)
@@ -150,6 +162,73 @@ class TuiTests(unittest.TestCase):
             state, "project dashboard", width=100, height=30, color=False, clear=False,
         )
         self.assertIn("Scope · alpha", rendered)
+
+    def test_project_picker_filters_as_user_types(self) -> None:
+        state = InteractiveState(project_options=("codex-stats", "Earth-Agent", "中文项目"))
+        parse_slash_command(state, "project")
+        for character in "earth":
+            handle_key(state, character)
+        rendered = _project_picker_text(state, 80)
+        self.assertEqual(state.project_query, "earth")
+        self.assertIn("Earth-Agent", rendered)
+        self.assertNotIn("codex-stats", rendered)
+        self.assertNotIn("All projects", rendered)
+        self.assertEqual(handle_key(state, "enter"), "project")
+        self.assertEqual(state.project_filter, "Earth-Agent")
+        self.assertEqual(state.project_query, "")
+
+    def test_project_picker_supports_unicode_filter_and_no_match_recovery(self) -> None:
+        state = InteractiveState(project_options=("codex-stats", "中文项目"))
+        parse_slash_command(state, "project")
+        handle_key(state, "中")
+        self.assertIn("中文项目", _project_picker_text(state, 80))
+        handle_key(state, "backspace")
+        for character in "missing":
+            handle_key(state, character)
+        self.assertIn("no matches", _project_picker_text(state, 80))
+        self.assertIsNone(handle_key(state, "enter"))
+        self.assertTrue(state.project_picker)
+        self.assertEqual(state.message, "No projects match the filter")
+        for _ in "missing":
+            handle_key(state, "backspace")
+        self.assertIn("All projects", _project_picker_text(state, 80))
+
+    def test_unicode_project_names_respect_terminal_column_width(self) -> None:
+        state = InteractiveState(project_options=("非常长的中文项目名称" * 4,))
+        parse_slash_command(state, "project")
+        rendered = _project_picker_text(state, 40)
+        self.assertTrue(all(_display_width(line) <= 40 for line in rendered.splitlines()))
+
+        overview = render_overview(
+            {}, [], period="DAY · PROJECT " + "中文项目" * 20, color=False, width=80,
+        )
+        self.assertTrue(all(tui_display_width(line) <= 80 for line in overview.splitlines()))
+
+    def test_project_picker_treats_q_as_filter_text_and_escape_cancels(self) -> None:
+        state = InteractiveState(project_options=("q-project",))
+        parse_slash_command(state, "project")
+        self.assertIsNone(handle_key(state, "q"))
+        self.assertEqual(state.project_query, "q")
+        self.assertTrue(state.running)
+        self.assertIsNone(handle_key(state, "escape"))
+        self.assertFalse(state.project_picker)
+        self.assertEqual(state.project_query, "")
+
+    def test_project_picker_accepts_spaces_and_restores_current_selection(self) -> None:
+        state = InteractiveState(
+            project_options=("recent", "my project", "older"),
+            project_filter="older",
+        )
+        parse_slash_command(state, "project")
+        self.assertEqual(state.project_selected, 3)
+        for key in ("m", "y", "space", "p"):
+            handle_key(state, key)
+        self.assertEqual(state.project_query, "my p")
+        self.assertIn("my project", _project_picker_text(state, 80))
+        for _ in "my p":
+            handle_key(state, "backspace")
+        self.assertEqual(state.project_query, "")
+        self.assertEqual(state.project_selected, 3)
 
     def test_interactive_screen_explains_keyboard_controls(self) -> None:
         rendered = render_interactive_screen(

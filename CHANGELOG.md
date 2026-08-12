@@ -2,6 +2,14 @@
 
 All notable changes to Codex Meter are documented here.
 
+## [0.12.3] - 2026-08-12
+
+- Add instant keyboard filtering to the interactive project picker.
+- Support UTF-8 and project names containing spaces in picker input.
+- Keep `q` as filter text inside the picker and retain Esc-to-cancel behavior.
+- Restore the current project selection after clearing a search.
+- Make Unicode project labels respect terminal display-column widths.
+
 ## [0.12.2] - 2026-08-12
 
 - Turn the slash-command palette into a focused overlay and avoid redundant database queries while it is open.
@@ -43,6 +51,7 @@ First public Linux release.
 - Versioned API-equivalent pricing with unknown prices shown as `N/A`.
 - One-line, no-sudo Linux installer.
 
+[0.12.3]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.12.3
 [0.12.2]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.12.2
 [0.12.1]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.12.1
 [0.12.0]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.12.0

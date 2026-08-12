@@ -8,6 +8,7 @@ import shutil
 import sys
 import termios
 import tty
+import unicodedata
 from dataclasses import dataclass
 from typing import Callable, TextIO
 
@@ -70,6 +71,7 @@ class InteractiveState:
     project_options: tuple[str, ...] = ()
     project_selected: int = 0
     project_filter: str | None = None
+    project_query: str = ""
     project_picker: bool = False
     project_return_view: str = "today"
 
@@ -164,7 +166,11 @@ def render_interactive_screen(
             else "Slash input · ↑/↓ choose · Enter run · Esc back"
         )
     elif state.project_picker:
-        controls = "Project scope · ↑/↓ choose · Enter/Space apply · Esc cancel"
+        controls = (
+            "Type filter · ↑/↓ · Enter · Esc"
+            if layout_width < 60
+            else "Type to filter · ↑/↓ choose · Enter/Space apply · Esc cancel"
+        )
     else:
         controls = (
             "Arrows · Enter open · / menu · q quit"
@@ -191,21 +197,21 @@ def render_interactive_screen(
     if state.command_mode:
         footer = [
             _style("─" * layout_width, BLUE, color),
-            _style(controls[:layout_width], MUTED, color),
-            _style(prompt[:layout_width], LIGHT, color),
+            _style(_fit_display(controls, layout_width), MUTED, color),
+            _style(_fit_display(prompt, layout_width), LIGHT, color),
         ]
     elif state.project_picker or state.show_help:
         footer = [
             _style("─" * layout_width, BLUE, color),
-            _style(status[:layout_width], GREEN, color),
-            _style(controls[:layout_width], MUTED, color),
+            _style(_fit_display(status, layout_width), GREEN, color),
+            _style(_fit_display(controls, layout_width), MUTED, color),
         ]
     else:
         footer = [
             _style("─" * layout_width, BLUE, color),
-            _style(status[:layout_width], GREEN, color),
+            _style(_fit_display(status, layout_width), GREEN, color),
             *menu,
-            _style(controls[:layout_width], MUTED, color),
+            _style(_fit_display(controls, layout_width), MUTED, color),
         ]
     available = max(1, height - len(header) - len(footer))
     clipped = _clip_body(body_lines, available, layout_width, color)
@@ -321,24 +327,29 @@ def _close_command_palette(state: InteractiveState) -> None:
 
 
 def _handle_project_key(state: InteractiveState, key: str) -> str | None:
-    choices = len(state.project_options) + 1
+    choices = _project_choices(state)
     if key in ("up", "left"):
-        state.project_selected = (state.project_selected - 1) % choices
+        if choices:
+            state.project_selected = (state.project_selected - 1) % len(choices)
         return None
     if key in ("down", "right"):
-        state.project_selected = (state.project_selected + 1) % choices
+        if choices:
+            state.project_selected = (state.project_selected + 1) % len(choices)
         return None
-    if key in ("enter", "space"):
-        state.project_filter = (
-            None if state.project_selected == 0
-            else state.project_options[state.project_selected - 1]
-        )
+    if key == "enter" or (key == "space" and not state.project_query):
+        if not choices:
+            state.message = "No projects match the filter"
+            return None
+        selected = min(state.project_selected, len(choices) - 1)
+        state.project_filter = choices[selected]
+        state.project_query = ""
         state.project_picker = False
         state.active_view = state.project_return_view
         state.selected = _menu_index(state.active_view)
         state.message = f"Scope: {_scope_label(state)}"
         return "project"
     if key == "escape":
+        state.project_query = ""
         state.project_picker = False
         state.active_view = state.project_return_view
         state.selected = _menu_index(state.active_view)
@@ -347,6 +358,20 @@ def _handle_project_key(state: InteractiveState, key: str) -> str | None:
     if key == "ctrl_c":
         state.running = False
         return "quit"
+    if key == "backspace":
+        state.project_query = state.project_query[:-1]
+        _reset_project_selection(state)
+        state.message = "Choose a project"
+        return None
+    if key == "space" and state.project_query and len(state.project_query) < 48:
+        state.project_query += " "
+        state.project_selected = 0
+        state.message = "Filtering projects"
+        return None
+    if len(key) == 1 and key.isprintable() and len(state.project_query) < 48:
+        state.project_query += key
+        state.project_selected = 0
+        state.message = "Filtering projects"
     return None
 
 
@@ -381,6 +406,7 @@ def _activate(state: InteractiveState, key: str) -> str | None:
         return None
     if key == "project":
         state.project_picker = True
+        state.project_query = ""
         state.project_return_view = state.active_view if state.active_view != "project" else "today"
         state.project_selected = (
             0 if state.project_filter is None
@@ -452,7 +478,7 @@ def _command_palette_lines(
     suggestions = _command_suggestions(state.command_text)
     if not suggestions:
         return [
-            _style("Commands · no matches · Backspace to edit"[:width], YELLOW, color),
+            _style(_fit_display("Commands · no matches · Backspace to edit", width), YELLOW, color),
         ]
 
     selected = min(state.command_selected, len(suggestions) - 1)
@@ -466,22 +492,24 @@ def _command_palette_lines(
             f"Commands · {page_start + 1}-{page_end} of {len(suggestions)} · "
             "↑/↓ choose · Enter run · Esc back"
         )
-    lines = [_style(heading[:width], MUTED, color)]
+    lines = [_style(_fit_display(heading, width), MUTED, color)]
     for offset, item in enumerate(page):
         index = page_start + offset
         marker = "▶" if index == selected else " "
         style = CYAN if index == selected else LIGHT
-        lines.append(_style(f"{marker} /{item.name:<14}  {item.description}"[:width], style, color))
+        lines.append(_style(_fit_display(f"{marker} /{item.name:<14}  {item.description}", width), style, color))
     return lines
 
 
 def _project_picker_text(state: InteractiveState, width: int, *, page_size: int = 8) -> str:
-    choices: tuple[str | None, ...] = (None, *state.project_options)
-    selected = min(state.project_selected, len(choices) - 1)
+    choices = _project_choices(state)
+    selected = min(state.project_selected, max(0, len(choices) - 1))
     page_start = selected // page_size * page_size
     page = choices[page_start : page_start + page_size]
     page_end = page_start + len(page)
-    if width < 60:
+    if not choices:
+        heading = "Projects · no matches · Backspace to edit"
+    elif width < 60:
         heading = f"Projects {page_start + 1}-{page_end}/{len(choices)} · ↑/↓ · Enter · Esc"
     else:
         heading = (
@@ -490,8 +518,8 @@ def _project_picker_text(state: InteractiveState, width: int, *, page_size: int 
         )
     lines = [
         "Choose project scope",
-        "",
-        heading[:width],
+        _fit_display(f"Filter · {_safe_label(state.project_query) or 'type to search'}▌", width),
+        _fit_display(heading, width),
         "─" * min(width, 88),
     ]
     for offset, project in enumerate(page):
@@ -499,10 +527,27 @@ def _project_picker_text(state: InteractiveState, width: int, *, page_size: int 
         marker = "▶" if index == selected else " "
         label = "All projects" if project is None else _safe_label(project)
         current = "  (current)" if project == state.project_filter else ""
-        lines.append(f"{marker} {label}{current}"[:width])
-    if not state.project_options:
+        lines.append(_fit_display(f"{marker} {label}{current}", width))
+    if state.project_query and not choices:
+        lines.extend(["", _fit_display(f"No projects match “{_safe_label(state.project_query)}”.", width)])
+    elif not state.project_options:
         lines.extend(["", "No named projects have been imported yet."])
     return "\n".join(lines)
+
+
+def _project_choices(state: InteractiveState) -> tuple[str | None, ...]:
+    query = state.project_query.strip().casefold()
+    if query:
+        return tuple(project for project in state.project_options if query in project.casefold())
+    return (None, *state.project_options)
+
+
+def _reset_project_selection(state: InteractiveState) -> None:
+    choices = _project_choices(state)
+    if not state.project_query and state.project_filter in choices:
+        state.project_selected = choices.index(state.project_filter)
+    else:
+        state.project_selected = 0
 
 
 def _scope_label(state: InteractiveState) -> str:
@@ -510,7 +555,30 @@ def _scope_label(state: InteractiveState) -> str:
 
 
 def _safe_label(value: str) -> str:
-    return "".join(character for character in str(value) if character.isprintable()).strip()[:96]
+    clean = "".join(character for character in str(value) if character.isprintable()).strip()
+    return _fit_display(clean, 96)
+
+
+def _fit_display(value: str, width: int) -> str:
+    result: list[str] = []
+    used = 0
+    for character in value:
+        cell_width = _character_width(character)
+        if used + cell_width > width:
+            break
+        result.append(character)
+        used += cell_width
+    return "".join(result)
+
+
+def _display_width(value: str) -> int:
+    return sum(_character_width(character) for character in value)
+
+
+def _character_width(character: str) -> int:
+    if unicodedata.combining(character):
+        return 0
+    return 2 if unicodedata.east_asian_width(character) in ("F", "W") else 1
 
 
 def _narrow_terminal_text(width: int) -> str:
@@ -587,6 +655,21 @@ def _read_key(fd: int) -> str:
     if value == b"\x03":
         return "ctrl_c"
     try:
+        first = value[0]
+        expected = (
+            1 if first < 0x80
+            else 2 if 0xC2 <= first <= 0xDF
+            else 3 if 0xE0 <= first <= 0xEF
+            else 4 if 0xF0 <= first <= 0xF4
+            else 0
+        )
+        if expected == 0:
+            return ""
+        while len(value) < expected:
+            continuation = os.read(fd, expected - len(value))
+            if not continuation:
+                return ""
+            value += continuation
         return value.decode("utf-8")
     except UnicodeDecodeError:
         return ""
