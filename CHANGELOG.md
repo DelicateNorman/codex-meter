@@ -2,6 +2,14 @@
 
 All notable changes to Codex Meter are documented here.
 
+## [0.12.0] - 2026-08-12
+
+- Add an interactive `Project` selector with `All projects` as the default.
+- Apply the selected project to day, week, month, all-time, history, and Network views.
+- Add `/project` to the slash-command palette.
+- Add `--project` to `today`, `summary`, and `history` for scripts.
+- Keep project and OS-user/account filters composable.
+
 ## [0.11.2] - 2026-08-12
 
 - Add explicit CA certificate-signing key usage for Python 3.13 TLS verification.
@@ -20,5 +28,6 @@ First public Linux release.
 - Versioned API-equivalent pricing with unknown prices shown as `N/A`.
 - One-line, no-sudo Linux installer.
 
+[0.12.0]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.12.0
 [0.11.2]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.11.2
 [0.11.1]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.11.1

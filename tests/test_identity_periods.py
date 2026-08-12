@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from codex_meter.cli import _period_bounds
+from codex_meter.cli import _period_bounds, build_parser
 from codex_meter.config import initialize_home, load_identity, update_account_identity
 from codex_meter.models import LlmCallRecord, TokenUsage
 from codex_meter.storage import Storage
@@ -32,12 +32,27 @@ class IdentityAndPeriodTests(unittest.TestCase):
             with Storage(database, owner_uid=1001, owner_username="alice", account_label="personal") as storage:
                 storage.migrate()
                 storage.insert_live_call("thread-personal", _call("p", "2026-08-12T01:00:00Z", 100))
+                with storage.transaction() as connection:
+                    connection.execute(
+                        "UPDATE sessions SET project_name='alpha' WHERE codex_thread_id='thread-personal'"
+                    )
             with Storage(database, owner_uid=1001, owner_username="alice", account_label="work") as storage:
                 storage.migrate()
                 storage.insert_live_call("thread-work", _call("w", "2026-08-13T01:00:00Z", 200))
+                with storage.transaction() as connection:
+                    connection.execute(
+                        "UPDATE sessions SET project_name='beta' WHERE codex_thread_id='thread-work'"
+                    )
                 self.assertEqual(storage.overview()["total_tokens"], 300)
                 self.assertEqual(storage.overview(account="personal")["total_tokens"], 100)
                 self.assertEqual(storage.overview(account="work")["total_tokens"], 200)
+                self.assertEqual(storage.overview(project="alpha")["total_tokens"], 100)
+                self.assertEqual(storage.overview(project="beta")["total_tokens"], 200)
+                self.assertEqual(
+                    storage.overview(account="work", project="beta")["total_tokens"], 200,
+                )
+                self.assertEqual(storage.project_names(), ["alpha", "beta"])
+                self.assertEqual(len(storage.usage_history("day", project="beta")), 1)
                 self.assertEqual(len(storage.usage_history("day")), 2)
                 labels = {row["account"] for row in storage.account_breakdown()}
                 self.assertEqual(labels, {"personal", "work"})
@@ -51,6 +66,15 @@ class IdentityAndPeriodTests(unittest.TestCase):
         self.assertEqual(_period_bounds("week", "2026-08-12")[:2], ("2026-08-10", "2026-08-16"))
         self.assertEqual(_period_bounds("month", "2026-02-12")[:2], ("2026-02-01", "2026-02-28"))
         self.assertEqual(_period_bounds("all", "2026-08-12")[:2], (None, None))
+
+    def test_summary_and_history_accept_project_filters(self) -> None:
+        parser = build_parser()
+        summary = parser.parse_args(["summary", "--period", "month", "--project", "alpha"])
+        history = parser.parse_args(["history", "--group", "week", "--project", "beta"])
+        today = parser.parse_args(["today", "--project", "gamma"])
+        self.assertEqual(summary.project, "alpha")
+        self.assertEqual(history.project, "beta")
+        self.assertEqual(today.project, "gamma")
 
 
 def _call(fingerprint: str, completed_at: str, tokens: int) -> LlmCallRecord:

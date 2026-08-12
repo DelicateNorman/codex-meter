@@ -2,7 +2,7 @@
 set -eu
 
 repository="DelicateNorman/codex-meter"
-version="${CODEX_METER_VERSION:-v0.11.2}"
+version="${CODEX_METER_VERSION:-v0.12.0}"
 install_root="${CODEX_METER_INSTALL_ROOT:-$HOME/.local/share/codex-meter}"
 bin_dir="${CODEX_METER_BIN_DIR:-$HOME/.local/bin}"
 python_command="${PYTHON:-python3}"

@@ -35,6 +35,7 @@ MENU_ITEMS = (
     MenuItem("history_week", "Weekly history"),
     MenuItem("history_month", "Monthly history"),
     MenuItem("network", "Network"),
+    MenuItem("project", "Project"),
     MenuItem("refresh", "Refresh"),
     MenuItem("help", "Help"),
     MenuItem("quit", "Quit"),
@@ -49,6 +50,7 @@ COMMAND_ITEMS = (
     CommandItem("history week", "按周查看历史变化"),
     CommandItem("history month", "按月查看历史变化"),
     CommandItem("network", "查看 Token 速度与响应延迟"),
+    CommandItem("project", "选择一个项目或全部项目"),
     CommandItem("refresh", "重新读取本机 Codex 记录"),
     CommandItem("help", "显示键盘和命令帮助"),
     CommandItem("quit", "退出 Codex Meter"),
@@ -65,12 +67,19 @@ class InteractiveState:
     show_help: bool = False
     running: bool = True
     message: str = "Today"
+    project_options: tuple[str, ...] = ()
+    project_selected: int = 0
+    project_filter: str | None = None
+    project_picker: bool = False
+    project_return_view: str = "today"
 
 
 def handle_key(state: InteractiveState, key: str) -> str | None:
     """Update interactive state and return a side-effect action when needed."""
     if state.command_mode:
         return _handle_command_key(state, key)
+    if state.project_picker:
+        return _handle_project_key(state, key)
 
     if key in ("up", "left"):
         state.selected = (state.selected - 1) % len(MENU_ITEMS)
@@ -114,6 +123,8 @@ def parse_slash_command(state: InteractiveState, text: str) -> str | None:
         "history week": "history_week",
         "history month": "history_month",
         "network": "network",
+        "project": "project",
+        "projects": "project",
         "daily": "history_day",
         "weekly": "history_week",
         "monthly": "history_month",
@@ -145,11 +156,12 @@ def render_interactive_screen(
     height = max(12, height)
     title = "CODEX METER · INTERACTIVE"
     menu = _menu_lines(state, width, color)
-    controls = (
-        "Slash input · ↑/↓ choose · Enter run · Esc back"
-        if state.command_mode
-        else "Arrows choose · Enter/Space open · / commands · r refresh · q quit"
-    )
+    if state.command_mode:
+        controls = "Slash input · ↑/↓ choose · Enter run · Esc back"
+    elif state.project_picker:
+        controls = "Project scope · ↑/↓ choose · Enter/Space apply · Esc cancel"
+    else:
+        controls = "Arrows choose · Enter/Space open · / commands · r refresh · q quit"
     prompt = f"/{state.command_text}▌" if state.command_mode else f"● {state.message}"
     header = [
         _style(title, CYAN, color),
@@ -159,6 +171,7 @@ def render_interactive_screen(
     body_lines = body.splitlines()
     footer = [
         _style("─" * min(width, 132), BLUE, color),
+        _style(f"Scope · {_scope_label(state)}"[:width], GREEN, color),
         *menu,
         _style(controls[:width], MUTED, color),
     ]
@@ -174,8 +187,9 @@ def render_interactive_screen(
 
 
 def run_interactive(
-    render_content: Callable[[str, int, bool], str],
+    render_content: Callable[[str, int, bool, str | None], str],
     refresh: Callable[[], None],
+    list_projects: Callable[[], list[str]] | None = None,
     *,
     color: bool = True,
     input_stream: TextIO = sys.stdin,
@@ -185,6 +199,7 @@ def run_interactive(
         raise ValueError("interactive mode requires a terminal")
 
     state = InteractiveState()
+    _sync_projects(state, list_projects() if list_projects else [])
     fd = input_stream.fileno()
     previous = termios.tcgetattr(fd)
     output_stream.write("\x1b[?1049h\x1b[?25l")
@@ -193,7 +208,11 @@ def run_interactive(
         tty.setcbreak(fd)
         while state.running:
             size = shutil.get_terminal_size((110, 30))
-            content = render_content(state.active_view, size.columns, color)
+            content = (
+                _project_picker_text(state, size.columns)
+                if state.project_picker
+                else render_content(state.active_view, size.columns, color, state.project_filter)
+            )
             output_stream.write(
                 render_interactive_screen(
                     state,
@@ -213,6 +232,7 @@ def run_interactive(
                 else:
                     state.message = "Usage refreshed"
                     state.show_help = False
+                    _sync_projects(state, list_projects() if list_projects else [])
     except KeyboardInterrupt:
         pass
     finally:
@@ -266,6 +286,49 @@ def _close_command_palette(state: InteractiveState) -> None:
     return None
 
 
+def _handle_project_key(state: InteractiveState, key: str) -> str | None:
+    choices = len(state.project_options) + 1
+    if key in ("up", "left"):
+        state.project_selected = (state.project_selected - 1) % choices
+        return None
+    if key in ("down", "right"):
+        state.project_selected = (state.project_selected + 1) % choices
+        return None
+    if key in ("enter", "space"):
+        state.project_filter = (
+            None if state.project_selected == 0
+            else state.project_options[state.project_selected - 1]
+        )
+        state.project_picker = False
+        state.active_view = state.project_return_view
+        state.selected = _menu_index(state.active_view)
+        state.message = f"Scope: {_scope_label(state)}"
+        return "project"
+    if key == "escape":
+        state.project_picker = False
+        state.active_view = state.project_return_view
+        state.selected = _menu_index(state.active_view)
+        state.message = _label_for(state.active_view)
+        return None
+    if key == "ctrl_c":
+        state.running = False
+        return "quit"
+    return None
+
+
+def _sync_projects(state: InteractiveState, projects: list[str]) -> None:
+    state.project_options = tuple(sorted(
+        {str(project) for project in projects if str(project).strip()},
+        key=str.casefold,
+    ))
+    if state.project_filter not in state.project_options:
+        state.project_filter = None
+    state.project_selected = (
+        0 if state.project_filter is None
+        else state.project_options.index(state.project_filter) + 1
+    )
+
+
 def _activate(state: InteractiveState, key: str) -> str | None:
     if key == "quit":
         state.running = False
@@ -277,6 +340,17 @@ def _activate(state: InteractiveState, key: str) -> str | None:
         state.message = "Help"
         state.selected = _menu_index(key)
         return None
+    if key == "project":
+        state.project_picker = True
+        state.project_return_view = state.active_view if state.active_view != "project" else "today"
+        state.project_selected = (
+            0 if state.project_filter is None
+            else state.project_options.index(state.project_filter) + 1
+        )
+        state.selected = _menu_index(key)
+        state.show_help = False
+        state.message = "Choose a project"
+        return "project_picker"
     state.active_view = key
     state.selected = _menu_index(key)
     state.show_help = False
@@ -295,7 +369,8 @@ def _label_for(key: str) -> str:
 def _menu_lines(state: InteractiveState, width: int, color: bool) -> list[str]:
     tokens: list[str] = []
     for index, item in enumerate(MENU_ITEMS):
-        marker = "▶" if index == state.selected else "●" if item.key == state.active_view else " "
+        active = item.key == state.active_view or (item.key == "project" and state.project_picker)
+        marker = "▶" if index == state.selected else "●" if active else " "
         style = CYAN if index == state.selected else GREEN if item.key == state.active_view else MUTED
         tokens.append(_style(f"{marker} {item.label}", style, color))
 
@@ -356,6 +431,37 @@ def _command_palette_lines(
     return lines
 
 
+def _project_picker_text(state: InteractiveState, width: int, *, page_size: int = 8) -> str:
+    choices: tuple[str | None, ...] = (None, *state.project_options)
+    selected = min(state.project_selected, len(choices) - 1)
+    page_start = selected // page_size * page_size
+    page = choices[page_start : page_start + page_size]
+    page_end = page_start + len(page)
+    lines = [
+        "Choose project scope",
+        "",
+        f"Projects · {page_start + 1}-{page_end} of {len(choices)} · ↑/↓ choose · Enter apply · Esc cancel",
+        "─" * min(width, 88),
+    ]
+    for offset, project in enumerate(page):
+        index = page_start + offset
+        marker = "▶" if index == selected else " "
+        label = "All projects" if project is None else _safe_label(project)
+        current = "  (current)" if project == state.project_filter else ""
+        lines.append(f"{marker} {label}{current}"[:width])
+    if not state.project_options:
+        lines.extend(["", "No named projects have been imported yet."])
+    return "\n".join(lines)
+
+
+def _scope_label(state: InteractiveState) -> str:
+    return _safe_label(state.project_filter) if state.project_filter else "All projects"
+
+
+def _safe_label(value: str) -> str:
+    return "".join(character for character in str(value) if character.isprintable()).strip()[:96]
+
+
 def _help_text(width: int) -> str:
     lines = [
         "Keyboard",
@@ -369,7 +475,7 @@ def _help_text(width: int) -> str:
         "Slash commands",
         "  /today  /week  /month  /all",
         "  /history day  /history week  /history month",
-        "  /network  /refresh  /help  /quit",
+        "  /network  /project  /refresh  /help  /quit",
     ]
     return "\n".join(line[:width] for line in lines)
 

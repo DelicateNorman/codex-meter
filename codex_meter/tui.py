@@ -134,10 +134,14 @@ def render_history(
     *,
     group: str,
     username: str,
+    project: str | None = None,
     color: bool | None = None,
 ) -> str:
     color = _supports_color() if color is None else color
-    output = [f"Usage history by {group} · OS user {username}", ""]
+    title = f"Usage history by {group} · OS user {username}"
+    if project:
+        title += f" · project {project}"
+    output = [title, ""]
     output.append(
         f"{'PERIOD':<14} {'SESS':>6} {'TURNS':>7} {'CALLS':>7} "
         f"{'TOKENS':>13} {'CACHE':>7} {'COST':>12}"
@@ -165,6 +169,7 @@ def render_network(
     *,
     period: str,
     username: str,
+    project: str | None = None,
     color: bool | None = None,
     width: int | None = None,
 ) -> str:
@@ -190,7 +195,10 @@ def render_network(
     exact_rates = sum(row.get("exact_output_tps") is not None for row in rows)
 
     lines.append(styled("╭" + "─" * (inner - 1) + "╮", BLUE))
-    lines.append(frame(f"NETWORK & RESPONSE  ● LOCAL  │  {period}  │  OS user {username}", CYAN))
+    title = f"NETWORK & RESPONSE  ● LOCAL  │  {period}  │  OS user {username}"
+    if project:
+        title += f"  │  project {project}"
+    lines.append(frame(title, CYAN))
     lines.append(styled("├" + "─" * (inner - 1) + "┤", BLUE))
     lines.append(frame(
         f"Samples {len(rows)} turns  ·  timed {len(e2e)}  ·  speed {len(usable_rates)} "

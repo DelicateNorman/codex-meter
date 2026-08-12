@@ -40,16 +40,19 @@ def build_parser() -> argparse.ArgumentParser:
     today = sub.add_parser("today", help="show today's overview")
     today.add_argument("--refresh", action="store_true", help="import changed rollout files first")
     today.add_argument("--account", help="optional configured account label")
+    today.add_argument("--project", help="optional project directory name")
 
     summary = sub.add_parser("summary", help="show day, week, month, or all-time overview")
     summary.add_argument("--period", choices=("day", "week", "month", "all"), default="day")
     summary.add_argument("--date", help="anchor local date in YYYY-MM-DD (default: today)")
     summary.add_argument("--account", help="optional configured account label")
+    summary.add_argument("--project", help="optional project directory name")
     summary.add_argument("--refresh", action="store_true", help="import changed rollout files first")
 
     history = sub.add_parser("history", help="group all usage since first use by day, week, or month")
     history.add_argument("--group", choices=("day", "week", "month"), default="day")
     history.add_argument("--account", help="optional configured account label")
+    history.add_argument("--project", help="optional project directory name")
     history.add_argument("--refresh", action="store_true", help="import changed rollout files first")
 
     account = sub.add_parser("account", help="optional manual account labels (disabled by default)")
@@ -231,9 +234,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command in ("summary", "history") and args.refresh:
             _import(storage, catalog, _codex_home() / "sessions", force=False, quiet=True)
         if args.command == "history":
-            return _history(storage, args.group, args.account)
+            return _history(storage, args.group, args.account, args.project)
         if args.command == "summary":
-            return _summary(storage, args.period, args.date, args.account, not args.no_color)
+            return _summary(
+                storage, args.period, args.date, args.account, args.project, not args.no_color,
+            )
 
         # The default interactive dashboard and `today` both reflect changed local history.
         if args.command is None or getattr(args, "refresh", False):
@@ -242,13 +247,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _interactive_dashboard(storage, catalog, color=not args.no_color)
         selected_day = date.today().isoformat()
         account_filter = getattr(args, "account", None)
-        overview = dict(storage.overview(selected_day, account=account_filter))
-        rows = [dict(row) for row in storage.model_breakdown(selected_day, account=account_filter)]
+        project_filter = getattr(args, "project", None)
+        overview = dict(storage.overview(
+            selected_day, account=account_filter, project=project_filter,
+        ))
+        rows = [dict(row) for row in storage.model_breakdown(
+            selected_day, account=account_filter, project=project_filter,
+        )]
+        today_label = f"TODAY · {selected_day}"
+        if project_filter:
+            today_label += f" · PROJECT {project_filter}"
         print(
             render_overview(
                 overview,
                 rows,
-                period=f"TODAY · {selected_day}",
+                period=today_label,
                 color=not args.no_color and sys.stdout.isatty(),
             )
         )
@@ -336,6 +349,7 @@ def _summary(
     period: str,
     anchor_text: str | None,
     account: str | None,
+    project: str | None,
     color: bool,
 ) -> int:
     try:
@@ -343,10 +357,14 @@ def _summary(
     except ValueError as error:
         print(f"invalid date: {error}", file=sys.stderr)
         return 2
-    overview = dict(storage.overview_range(start, end, account=account))
-    rows = [dict(row) for row in storage.model_breakdown_range(start, end, account=account)]
+    overview = dict(storage.overview_range(start, end, account=account, project=project))
+    rows = [dict(row) for row in storage.model_breakdown_range(
+        start, end, account=account, project=project,
+    )]
     if account:
         label += f" · ACCOUNT {account}"
+    if project:
+        label += f" · PROJECT {project}"
     print(render_overview(
         overview, rows, period=label,
         color=color and sys.stdout.isatty(),
@@ -354,10 +372,20 @@ def _summary(
     return 0
 
 
-def _history(storage: Storage, group: str, account: str | None) -> int:
-    print(f"Usage history by {group} · OS user {storage.owner_username}" + (f" · account {account}" if account else ""))
+def _history(
+    storage: Storage,
+    group: str,
+    account: str | None,
+    project: str | None,
+) -> int:
+    scope = f"Usage history by {group} · OS user {storage.owner_username}"
+    if account:
+        scope += f" · account {account}"
+    if project:
+        scope += f" · project {project}"
+    print(scope)
     print(f"{'PERIOD START':<14} {'SESS':>7} {'TURNS':>7} {'CALLS':>7} {'INPUT':>14} {'CACHED':>14} {'OUTPUT':>12} {'TOKENS':>14} {'COST':>12}")
-    rows = storage.usage_history(group, account=account)
+    rows = storage.usage_history(group, account=account, project=project)
     for row in rows:
         cost = "N/A" if row["cost_usd"] is None else f"${float(row['cost_usd']):.2f} eq"
         print(
@@ -372,34 +400,47 @@ def _history(storage: Storage, group: str, account: str | None) -> int:
 
 
 def _interactive_dashboard(storage: Storage, catalog: PricingCatalog, *, color: bool) -> int:
-    def content(view: str, width: int, use_color: bool) -> str:
+    def content(
+        view: str,
+        width: int,
+        use_color: bool,
+        project: str | None,
+    ) -> str:
         if view == "network":
             start, end, label = _period_bounds("day", None)
-            rows = [dict(row) for row in storage.response_performance_range(start, end)]
-            flows = [dict(row) for row in storage.recent_network(5)]
+            rows = [dict(row) for row in storage.response_performance_range(
+                start, end, project=project,
+            )]
+            flows = [dict(row) for row in storage.recent_network(5, project=project)]
             return render_network(
                 rows,
                 flows,
                 period=label,
                 username=storage.owner_username,
+                project=project,
                 color=use_color,
                 width=width,
             )
 
         if view.startswith("history_"):
             group = view.removeprefix("history_")
-            rows = [dict(row) for row in storage.usage_history(group)]
+            rows = [dict(row) for row in storage.usage_history(group, project=project)]
             return render_history(
                 rows,
                 group=group,
                 username=storage.owner_username,
+                project=project,
                 color=use_color,
             )
 
         period = {"today": "day", "week": "week", "month": "month", "all": "all"}.get(view, "day")
         start, end, label = _period_bounds(period, None)
-        overview = dict(storage.overview_range(start, end))
-        rows = [dict(row) for row in storage.model_breakdown_range(start, end)]
+        overview = dict(storage.overview_range(start, end, project=project))
+        rows = [dict(row) for row in storage.model_breakdown_range(
+            start, end, project=project,
+        )]
+        if project:
+            label += f" · PROJECT {project}"
         return render_overview(
             overview,
             rows,
@@ -413,7 +454,7 @@ def _interactive_dashboard(storage: Storage, catalog: PricingCatalog, *, color: 
         if result:
             raise OSError("one or more rollout files could not be imported")
 
-    return run_interactive(content, refresh, color=color)
+    return run_interactive(content, refresh, storage.project_names, color=color)
 
 
 def _account(storage: Storage, identity: object, args: argparse.Namespace) -> int:

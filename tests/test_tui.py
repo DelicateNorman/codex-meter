@@ -45,6 +45,9 @@ class TuiTests(unittest.TestCase):
         self.assertEqual(state.active_view, "history_month")
         self.assertEqual(parse_slash_command(state, "network"), "view")
         self.assertEqual(state.active_view, "network")
+        self.assertEqual(parse_slash_command(state, "project"), "project_picker")
+        self.assertTrue(state.project_picker)
+        handle_key(state, "escape")
         self.assertEqual(parse_slash_command(state, "refresh"), "refresh")
         self.assertEqual(parse_slash_command(state, "quit"), "quit")
         self.assertFalse(state.running)
@@ -106,9 +109,29 @@ class TuiTests(unittest.TestCase):
             color=False,
             clear=False,
         )
-        self.assertIn("Commands · 6-10 of 11", rendered)
+        self.assertIn("Commands · 6-10 of 12", rendered)
         self.assertIn("▶ /history week", rendered)
         self.assertIn("按周查看历史变化", rendered)
+
+    def test_project_picker_applies_scope_and_preserves_it_across_views(self) -> None:
+        state = InteractiveState(project_options=("alpha", "beta"))
+        self.assertEqual(parse_slash_command(state, "project"), "project_picker")
+        self.assertTrue(state.project_picker)
+        handle_key(state, "down")
+        self.assertEqual(handle_key(state, "enter"), "project")
+        self.assertEqual(state.project_filter, "alpha")
+        self.assertFalse(state.project_picker)
+        self.assertEqual(state.active_view, "today")
+
+        handle_key(state, "right")
+        self.assertEqual(handle_key(state, "enter"), "view")
+        self.assertEqual(state.active_view, "week")
+        self.assertEqual(state.project_filter, "alpha")
+
+        rendered = render_interactive_screen(
+            state, "project dashboard", width=100, height=30, color=False, clear=False,
+        )
+        self.assertIn("Scope · alpha", rendered)
 
     def test_interactive_screen_explains_keyboard_controls(self) -> None:
         rendered = render_interactive_screen(

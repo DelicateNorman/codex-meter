@@ -638,8 +638,9 @@ class Storage:
         day: str | None = None,
         *,
         account: str | None = None,
+        project: str | None = None,
     ) -> sqlite3.Row:
-        return self.overview_range(day, day, account=account)
+        return self.overview_range(day, day, account=account, project=project)
 
     def overview_range(
         self,
@@ -647,9 +648,11 @@ class Storage:
         to_date: str | None = None,
         *,
         account: str | None = None,
+        project: str | None = None,
     ) -> sqlite3.Row:
         where, params = self._owned_call_filter(
-            "c.completed_at", from_date=from_date, to_date=to_date, account=account,
+            "c.completed_at", from_date=from_date, to_date=to_date,
+            account=account, project=project,
         )
         return self.connection.execute(
             f"""
@@ -688,8 +691,9 @@ class Storage:
         day: str | None = None,
         *,
         account: str | None = None,
+        project: str | None = None,
     ) -> list[sqlite3.Row]:
-        return self.model_breakdown_range(day, day, account=account)
+        return self.model_breakdown_range(day, day, account=account, project=project)
 
     def model_breakdown_range(
         self,
@@ -697,9 +701,11 @@ class Storage:
         to_date: str | None = None,
         *,
         account: str | None = None,
+        project: str | None = None,
     ) -> list[sqlite3.Row]:
         where, params = self._owned_call_filter(
-            "c.completed_at", from_date=from_date, to_date=to_date, account=account,
+            "c.completed_at", from_date=from_date, to_date=to_date,
+            account=account, project=project,
         )
         return list(
             self.connection.execute(
@@ -795,7 +801,13 @@ class Storage:
                 )
             return db.total_changes - before
 
-    def usage_history(self, group: str, *, account: str | None = None) -> list[sqlite3.Row]:
+    def usage_history(
+        self,
+        group: str,
+        *,
+        account: str | None = None,
+        project: str | None = None,
+    ) -> list[sqlite3.Row]:
         bucket = {
             "day": "date(c.completed_at, 'localtime')",
             "week": "date(c.completed_at, 'localtime', 'weekday 0', '-6 days')",
@@ -803,7 +815,9 @@ class Storage:
         }.get(group)
         if bucket is None:
             raise ValueError("group must be day, week, or month")
-        where, params = self._owned_call_filter("c.completed_at", account=account)
+        where, params = self._owned_call_filter(
+            "c.completed_at", account=account, project=project,
+        )
         return list(self.connection.execute(
             f"""
             SELECT {bucket} AS period_start,
@@ -1029,7 +1043,49 @@ class Storage:
         )
         return turn, calls, tools
 
-    def recent_network(self, limit: int = 30) -> list[sqlite3.Row]:
+    def project_names(self) -> list[str]:
+        if self.owner_uid is not None:
+            owner_clause = "s.owner_uid=?"
+            params: tuple[object, ...] = (self.owner_uid,)
+        else:
+            owner_clause = "s.owner_username=?"
+            params = (self.owner_username,)
+        rows = self.connection.execute(
+            f"""
+            SELECT COALESCE(s.project_name, 'Unknown') AS project
+            FROM sessions s
+            WHERE {owner_clause}
+            GROUP BY s.project_name
+            ORDER BY project COLLATE NOCASE
+            """,
+            params,
+        )
+        return [str(row["project"]) for row in rows]
+
+    def recent_network(
+        self,
+        limit: int = 30,
+        *,
+        project: str | None = None,
+    ) -> list[sqlite3.Row]:
+        if project is not None:
+            if self.owner_uid is not None:
+                owner_clause = "s.owner_uid=?"
+                params: tuple[object, ...] = (self.owner_uid, project, max(1, limit))
+            else:
+                owner_clause = "s.owner_username=?"
+                params = (self.owner_username, project, max(1, limit))
+            return list(
+                self.connection.execute(
+                    f"""
+                    SELECT nf.* FROM network_flows nf
+                    JOIN sessions s ON s.codex_thread_id=nf.thread_id
+                    WHERE {owner_clause} AND COALESCE(s.project_name, 'Unknown')=?
+                    ORDER BY COALESCE(nf.started_at, nf.created_at) DESC LIMIT ?
+                    """,
+                    params,
+                )
+            )
         return list(
             self.connection.execute(
                 "SELECT * FROM network_flows ORDER BY COALESCE(started_at, created_at) DESC LIMIT ?",
@@ -1041,10 +1097,12 @@ class Storage:
         self,
         from_date: str | None = None,
         to_date: str | None = None,
+        *,
+        project: str | None = None,
     ) -> list[sqlite3.Row]:
         """Return content-free turn timing samples for the current OS user."""
         where, params = self._owned_call_filter(
-            "t.completed_at", from_date=from_date, to_date=to_date,
+            "t.completed_at", from_date=from_date, to_date=to_date, project=project,
         )
         return list(
             self.connection.execute(
@@ -1123,6 +1181,7 @@ class Storage:
         from_date: str | None = None,
         to_date: str | None = None,
         account: str | None = None,
+        project: str | None = None,
     ) -> tuple[str, tuple[object, ...]]:
         clauses: list[str] = []
         params: list[object] = []
@@ -1143,6 +1202,9 @@ class Storage:
         elif account:
             clauses.append("s.account_label = ?")
             params.append(account)
+        if project is not None:
+            clauses.append("COALESCE(s.project_name, 'Unknown') = ?")
+            params.append(project)
         return "WHERE " + " AND ".join(clauses), tuple(params)
 
     @staticmethod
