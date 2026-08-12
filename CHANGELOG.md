@@ -2,6 +2,28 @@
 
 All notable changes to Codex Meter are documented here.
 
+## [0.16.0-beta.3] - 2026-08-12
+
+### Added
+
+- Show live per-file and source-byte progress for foreground and background SSH
+  synchronization.
+
+### Changed
+
+- Filter Rollouts on Python 3-capable remote hosts and send only a
+  gzip-compressed metadata allowlist over SSH; prompts, responses, reasoning,
+  commands, and tool output no longer cross the connection.
+- Preserve a clearly labelled legacy in-memory transfer fallback for remote
+  hosts without Python 3.
+
+### Verified
+
+- The development host's live 60-file, 678 MiB Rollout set became a 2.17 MiB
+  compressed metadata stream (99.7% smaller) and completed the new server-filter
+  path in about three seconds on a local transport simulation; all 21,000+
+  exported call rows matched a full local parse exactly.
+
 ## [0.16.0-beta.2] - 2026-08-12
 
 ### Fixed
@@ -120,6 +142,7 @@ First public Linux release.
 - Versioned API-equivalent pricing with unknown prices shown as `N/A`.
 - One-line, no-sudo Linux installer.
 
+[0.16.0-beta.3]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.0-beta.3
 [0.16.0-beta.2]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.0-beta.2
 [0.16.0-beta.1]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.0-beta.1
 [0.15.0]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.15.0

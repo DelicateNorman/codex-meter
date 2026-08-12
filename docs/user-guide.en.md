@@ -13,7 +13,7 @@ It does not replace the official `codex` command, and it does not clear or modif
 Open a terminal and paste this one-line installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.0-beta.2/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.0-beta.3/install.sh | sh
 ```
 
 Then run:
@@ -29,7 +29,7 @@ The program is installed for the current user under `~/.local/bin`; `sudo` is no
 Open PowerShell and paste:
 
 ```powershell
-irm https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.0-beta.2/install.ps1 | iex
+irm https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.0-beta.3/install.ps1 | iex
 ```
 
 Open a new terminal after installation, then run:
@@ -53,7 +53,7 @@ codex-meter --version
 For this release, the result should be:
 
 ```text
-codex-meter 0.16.0-beta.2
+codex-meter 0.16.0-beta.3
 ```
 
 If the shell cannot find the command, close the terminal and open a new one. On Linux and macOS, you can also check:
@@ -271,7 +271,7 @@ Without `--project`, reports always include all projects.
 
 When Codex Desktop opens a project over SSH, Codex runs on that server and normally writes its Rollouts to the server's `~/.codex/sessions`. A Mac-only local scan therefore cannot see those tokens.
 
-Starting with version 0.15.0, an SSH host can be configured as another history source. Codex Meter does not need to be installed on the remote server. The Mac must be able to connect through SSH, and the remote host needs the common `tar` command.
+Starting with version 0.15.0, an SSH host can be configured as another history source. Codex Meter does not need to be installed on the remote server. The Mac must be able to connect through SSH. Python 3 on the remote host enables the fast privacy-filtered protocol; `tar` provides compatibility for older hosts.
 
 First verify that the SSH alias used by Codex Desktop also works in the Mac terminal:
 
@@ -307,7 +307,7 @@ codex-meter remote sync devbox
 codex-meter remote remove devbox
 ```
 
-The first sync reads existing history. Later syncs transfer only new or changed Rollouts. Prompts, responses, and reasoning content are parsed from the SSH stream in memory; they are not written to the Mac database or a temporary Rollout file. The local database keeps only normalized metadata such as tokens, models, timestamps, and projects.
+The first sync reads existing history and displays per-file/source-byte progress. Later syncs process only new or changed Rollouts. With Python 3 available remotely, filtering happens on the server and only gzip-compressed token/model/timing/project metadata crosses SSH; prompts, responses, reasoning, commands, and tool output do not. If the UI explicitly says `legacy full transfer`, the remote host lacks Python 3 and the compatible older path is active: raw content passes only through encrypted memory and is still never written to the Mac database or a temporary Rollout file.
 
 `remote remove` stops future synchronization but intentionally keeps statistics that were already imported.
 

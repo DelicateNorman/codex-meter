@@ -597,7 +597,53 @@ fn sync_remotes(
 ) -> Result<()> {
     let mut failed = Vec::new();
     for host in hosts {
-        match crate::remote::sync(storage, catalog, host, force) {
+        let progress_terminal = io::stderr().is_terminal();
+        let mut progress_printed = false;
+        let mut last_completed = usize::MAX;
+        let sync = if quiet {
+            crate::remote::sync(storage, catalog, host, force)
+        } else {
+            crate::remote::sync_with_progress(storage, catalog, host, force, |progress| {
+                if progress.total_files == 0 || progress.completed_files == last_completed {
+                    return;
+                }
+                last_completed = progress.completed_files;
+                progress_printed = true;
+                let percent = if progress.total_source_bytes == 0 {
+                    100
+                } else {
+                    progress
+                        .completed_source_bytes
+                        .saturating_mul(100)
+                        .checked_div(progress.total_source_bytes)
+                        .unwrap_or(0)
+                        .min(100)
+                };
+                let mode = if progress.server_filtered {
+                    "server metadata scan"
+                } else {
+                    "legacy full transfer"
+                };
+                let message = format!(
+                    "{}: {mode} {}/{} · {percent:>3}% · {} / {} source scanned",
+                    progress.host,
+                    progress.completed_files,
+                    progress.total_files,
+                    human_bytes(progress.completed_source_bytes),
+                    human_bytes(progress.total_source_bytes),
+                );
+                if progress_terminal {
+                    eprint!("\r\x1b[2K{message}");
+                    let _ = io::stderr().flush();
+                } else {
+                    eprintln!("{message}");
+                }
+            })
+        };
+        if progress_terminal && progress_printed {
+            eprintln!();
+        }
+        match sync {
             Ok(result) if !quiet => println!(
                 "{}: discovered {}, imported {}, skipped {}, failed {}; {} turns, {} LLM calls, {} tools.",
                 result.host,
@@ -622,6 +668,22 @@ fn sync_remotes(
         bail!("{} remote host(s) failed", failed.len());
     }
     Ok(())
+}
+
+fn human_bytes(bytes: u64) -> String {
+    const KIB: f64 = 1024.0;
+    const MIB: f64 = KIB * 1024.0;
+    const GIB: f64 = MIB * 1024.0;
+    let bytes = bytes as f64;
+    if bytes >= GIB {
+        format!("{:.1} GiB", bytes / GIB)
+    } else if bytes >= MIB {
+        format!("{:.1} MiB", bytes / MIB)
+    } else if bytes >= KIB {
+        format!("{:.1} KiB", bytes / KIB)
+    } else {
+        format!("{bytes:.0} B")
+    }
 }
 
 fn account_command(
@@ -1950,13 +2012,18 @@ fn interactive(
             }
             None => {}
         }
-        let remote_update = poll_remote_receiver
-            .borrow()
-            .as_ref()
-            .and_then(|receiver| receiver.try_recv().ok());
+        let remote_update = poll_remote_receiver.borrow().as_ref().and_then(|receiver| {
+            let mut latest = None;
+            while let Ok(update) = receiver.try_recv() {
+                latest = Some(update);
+            }
+            latest
+        });
         if let Some(message) = remote_update {
-            *poll_remote_message.borrow_mut() = Some(message);
-            *poll_remote_receiver.borrow_mut() = None;
+            *poll_remote_message.borrow_mut() = Some(message.text);
+            if message.finished {
+                *poll_remote_receiver.borrow_mut() = None;
+            }
             changed = true;
         }
         changed
@@ -2072,12 +2139,17 @@ fn render_view(
     Ok(tui::render_overview(&overview.into(), &models, &options))
 }
 
+struct RemoteWorkerUpdate {
+    text: String,
+    finished: bool,
+}
+
 fn spawn_remote_worker(
     path: PathBuf,
     identity: LocalIdentity,
     catalog: PricingCatalog,
     hosts: Vec<String>,
-) -> std::sync::mpsc::Receiver<String> {
+) -> std::sync::mpsc::Receiver<RemoteWorkerUpdate> {
     let (sender, receiver) = std::sync::mpsc::channel();
     thread::spawn(move || {
         let result = (|| -> Result<(usize, Vec<String>)> {
@@ -2085,7 +2157,40 @@ fn spawn_remote_worker(
             let mut imported = 0;
             let mut failures = Vec::new();
             for host in &hosts {
-                match crate::remote::sync(&mut storage, &catalog, host, false) {
+                let progress_sender = sender.clone();
+                match crate::remote::sync_with_progress(
+                    &mut storage,
+                    &catalog,
+                    host,
+                    false,
+                    |progress| {
+                        if progress.total_files == 0 {
+                            return;
+                        }
+                        let percent = if progress.total_source_bytes == 0 {
+                            100
+                        } else {
+                            progress
+                                .completed_source_bytes
+                                .saturating_mul(100)
+                                .checked_div(progress.total_source_bytes)
+                                .unwrap_or(0)
+                                .min(100)
+                        };
+                        let mode = if progress.server_filtered {
+                            "server metadata"
+                        } else {
+                            "legacy transfer"
+                        };
+                        let _ = progress_sender.send(RemoteWorkerUpdate {
+                            text: format!(
+                                "{} · {mode} {}/{} · {percent}%",
+                                progress.host, progress.completed_files, progress.total_files
+                            ),
+                            finished: false,
+                        });
+                    },
+                ) {
                     Ok(row) => {
                         imported += row.imported_files;
                         if row.failed_files > 0 {
@@ -2112,7 +2217,10 @@ fn spawn_remote_worker(
             }
             Err(error) => format!("Remote sync failed: {error:#} · press r to retry"),
         };
-        let _ = sender.send(message);
+        let _ = sender.send(RemoteWorkerUpdate {
+            text: message,
+            finished: true,
+        });
     });
     receiver
 }

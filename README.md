@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.0-beta.2"><img alt="Latest beta" src="https://img.shields.io/badge/release-v0.16.0--beta.2-0a84ff?style=flat-square"></a>
+  <a href="https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.0-beta.3"><img alt="Latest beta" src="https://img.shields.io/badge/release-v0.16.0--beta.3-0a84ff?style=flat-square"></a>
   <a href="https://github.com/DelicateNorman/codex-meter/actions/workflows/ci.yml"><img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/DelicateNorman/codex-meter/ci.yml?branch=main&style=flat-square&label=tests&color=38d996"></a>
   <img alt="Platforms" src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-38bdf8?style=flat-square">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-f7c948?style=flat-square"></a>
@@ -30,7 +30,7 @@
 
 Codex Meter turns the history already written by Codex—on this computer or configured SSH hosts—into an interactive terminal dashboard. It shows where your tokens went, which projects and models used them, how well caching worked, how long responses took, and how much of the active account's seven-day allowance remains.
 
-> **Rust beta:** v0.16.0-beta.2 replaces the Python runtime with one small native
+> **Rust beta:** v0.16.0-beta.3 replaces the Python runtime with one small native
 > executable while keeping the v0.15 database and configuration format. Existing
 > `~/.codex-meter` history is preserved during installation, upgrade, and rollback.
 
@@ -65,13 +65,13 @@ Standalone installers verify the release checksum, install only for the current 
 ### Linux and macOS
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.0-beta.2/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.0-beta.3/install.sh | sh
 ```
 
 ### Windows PowerShell
 
 ```powershell
-irm https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.0-beta.2/install.ps1 | iex
+irm https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.0-beta.3/install.ps1 | iex
 ```
 
 Open a new terminal and run:
@@ -177,7 +177,7 @@ Codex Meter never reads `auth.json`, credentials, access tokens, or email addres
 
 ## Include Codex work from a remote server
 
-When Codex Desktop opens a project through SSH, Codex runs on that server and writes its Rollouts there. Codex Meter 0.15 can stream those records into the dashboard on your Mac; Codex Meter does **not** need to be installed on the server.
+When Codex Desktop opens a project through SSH, Codex runs on that server and writes its Rollouts there. Codex Meter can bring those records into the dashboard on your Mac; Codex Meter does **not** need to be installed on the server.
 
 First make sure the same SSH alias works in the Mac terminal, then add it once:
 
@@ -196,7 +196,9 @@ codex-meter remote sync          # update all sources now
 codex-meter remote remove devbox # stop future syncs
 ```
 
-Remote prompts and responses are parsed from the SSH stream in memory and are never copied into the local database or a temporary Rollout file. Only normalized usage/timing/project metadata is retained. Removing a source stops future updates but deliberately keeps its already imported statistics.
+On hosts with Python 3, a temporary standard-library filter runs on the server: it scans the source bytes there, removes prompts, responses, reasoning, commands, and tool output, then sends only a gzip-compressed metadata stream over SSH. The CLI and dashboard show per-file/source-byte progress. If Python 3 is unavailable, the UI explicitly reports `legacy full transfer`; the older encrypted in-memory stream remains compatible and still never writes raw Rollouts locally. Only normalized usage/timing/project metadata is retained. Removing a source stops future updates but deliberately keeps its already imported statistics.
+
+As a real-world check, 60 Rollouts totaling 678 MiB on the development host produced a 2.17 MiB filtered stream—a 99.7% reduction—while matching every exported call from a full local parse.
 
 ## Privacy model
 

@@ -13,7 +13,7 @@ Codex Meter 是一个独立于 Codex CLI 的本地统计工具。它读取当前
 打开终端，粘贴下面这一行：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.0-beta.2/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.0-beta.3/install.sh | sh
 ```
 
 安装完成后运行：
@@ -29,7 +29,7 @@ codex-meter
 打开 PowerShell，粘贴下面这一行：
 
 ```powershell
-irm https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.0-beta.2/install.ps1 | iex
+irm https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.0-beta.3/install.ps1 | iex
 ```
 
 安装后重新打开一个终端，再运行：
@@ -53,7 +53,7 @@ codex-meter --version
 当前版本应显示：
 
 ```text
-codex-meter 0.16.0-beta.2
+codex-meter 0.16.0-beta.3
 ```
 
 如果提示找不到命令，请关闭当前终端并重新打开。Linux/macOS 还可以检查：
@@ -271,7 +271,7 @@ codex-meter projects
 
 如果你在 Codex 桌面端里通过 SSH 打开远程项目，Codex 实际运行在远程服务器，Rollout 也默认写在远程服务器的 `~/.codex/sessions`。因此旧版本只扫描 Mac 本地时，看不到这部分 Token。
 
-从 0.15.0 开始，可以把 SSH 主机添加为统计数据源。远程服务器不需要安装 Codex Meter，只需能从 Mac 正常 SSH 登录，并且安装了常见的 `tar` 命令。
+从 0.15.0 开始，可以把 SSH 主机添加为统计数据源。远程服务器不需要安装 Codex Meter，只需能从 Mac 正常 SSH 登录。远程主机有 Python 3 时会使用快速隐私过滤协议；`tar` 用于兼容较旧的主机环境。
 
 先确认 Mac 终端能使用与 Codex 桌面端相同的 SSH 别名：
 
@@ -307,7 +307,7 @@ codex-meter remote sync devbox
 codex-meter remote remove devbox
 ```
 
-首次同步需要读取已有历史，之后只传输新增或发生变化的 Rollout。原始提示词、回答和推理内容只经过 SSH 内存流解析，不会保存到 Mac 的数据库或临时文件；本地只保留 Token、模型、时间、项目等统计字段。`remote remove` 只停止后续同步，不会删除已经统计的数据。
+首次同步需要读取已有历史，界面会显示文件数和源数据字节进度；之后只处理新增或发生变化的 Rollout。远程主机有 Python 3 时，过滤直接在服务器上完成，SSH 只传输 gzip 压缩后的 Token、模型、时间、项目等白名单元数据，提示词、回答、推理、命令和工具输出都不会传到 Mac。如果界面明确显示 `legacy full transfer`，说明远程没有 Python 3，程序会使用兼容旧路径：原始内容只通过加密内存流，不会写入 Mac 数据库或临时文件。`remote remove` 只停止后续同步，不会删除已经统计的数据。
 
 如果添加失败，先在普通终端解决 `ssh devbox` 的登录、Host Key 或密钥问题。自动同步使用非交互模式，不会在界面背后等待密码输入。
 
