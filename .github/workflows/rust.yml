@@ -26,6 +26,9 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test --all-targets --locked
+      - name: Build differential-test binary
+        if: runner.os == 'Linux'
+        run: cargo build --locked
       - name: Python/Rust differential fixture
         if: runner.os == 'Linux'
         env:
