@@ -62,6 +62,9 @@ jobs:
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: |
           if (-not $env:WINDOWS_CERTIFICATE -or -not $env:WINDOWS_CERTIFICATE_PASSWORD) {
+            if ($env:GITHUB_REF_TYPE -eq "tag" -and $env:GITHUB_REF_NAME -notmatch "-") {
+              throw "Stable releases require WINDOWS_CERTIFICATE and WINDOWS_CERTIFICATE_PASSWORD."
+            }
             Write-Warning "WINDOWS_CERTIFICATE secrets are not configured; publishing an unsigned executable."
             return
           }
@@ -162,6 +165,10 @@ jobs:
           if test -n "$APPLE_CERTIFICATE" && test -n "$APPLE_CERTIFICATE_PASSWORD" && test -n "$APPLE_ID" && test -n "$APPLE_PASSWORD" && test -n "$APPLE_TEAM_ID"; then
             echo "APPLE_SIGNING_READY=true" >> "$GITHUB_ENV"
           else
+            case "${GITHUB_REF_TYPE:-}:${GITHUB_REF_NAME:-}" in
+              tag:v*[!-0-9.]*) ;;
+              tag:v*) echo "::error::Stable releases require all Apple Developer ID and notarization secrets."; exit 1 ;;
+            esac
             echo "APPLE_SIGNING_READY=false" >> "$GITHUB_ENV"
             echo "::warning::Apple Developer ID secrets are incomplete; the app will be ad-hoc signed and cannot be notarized."
           fi

@@ -388,7 +388,9 @@ Codex Meter is pre-1.0 software. Releases include checksum-verified binaries;
 the CI signing and notarization paths are ready but remain inactive until the
 project has Apple Developer ID and Windows certificate secrets. Experimental
 Codex surfaces stay behind adapters and capability detection, and missing
-metrics fail gracefully to `Unknown`/`N/A`.
+metrics fail gracefully to `Unknown`/`N/A`. Stable tags are blocked until the
+required signing secrets are present; maintainers can follow the
+[release-signing guide](docs/release-signing.md).
 
 A version-pinned upstream patch for a native Codex `/meter` command is available under [`integrations/`](integrations/), but it is never applied to the installed Codex binary automatically.
 
