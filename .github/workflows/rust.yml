@@ -1,4 +1,4 @@
-name: Rust rewrite
+name: Rust
 
 on:
   push:
@@ -26,15 +26,15 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test --all-targets --locked
-      - name: Build differential-test binary
-        if: runner.os == 'Linux'
-        run: cargo build --locked
-      - name: Python/Rust differential fixture
-        if: runner.os == 'Linux'
-        env:
-          CODEX_METER_RUST_BIN: ${{ github.workspace }}/target/debug/codex-meter
-        run: python3 -m unittest -v tests.test_rust_python_parity
       - run: cargo build --release --locked
+      - name: Enforce startup and incremental performance budgets
+        if: runner.os == 'Linux'
+        run: python3 tests/performance_budget.py --binary target/release/codex-meter --enforce --output performance.json
+      - uses: actions/upload-artifact@v7
+        if: runner.os == 'Linux'
+        with:
+          name: performance-budget
+          path: performance.json
       - name: Smoke command surface
         shell: bash
         run: |

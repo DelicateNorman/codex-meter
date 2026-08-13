@@ -4,10 +4,11 @@ This document is the acceptance specification for rewriting Codex Meter 0.15.0 i
 
 ## Verification snapshot (2026-08-13)
 
-The Rust implementation has merged into `main` and is prepared for the v0.16.0
-release. The detailed checkboxes below remain an auditable specification and
-follow-up inventory; they are deliberately not mass-checked without individual
-evidence.
+The Rust implementation has shipped from `main` since v0.16.0. The frozen
+Python authority is permanently available at tag `v0.15.0` and branch
+`legacy-python-v0.15`; it is intentionally no longer duplicated on `main`.
+The detailed checklist below remains the audit specification and historical
+evidence map.
 
 | Area | Evidence recorded for v0.16.0 |
 |---|---|

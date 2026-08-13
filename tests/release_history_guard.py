@@ -8,15 +8,11 @@ import sqlite3
 import subprocess
 from pathlib import Path
 
-from helpers import base_events, complete_event, token_event, write_rollout
-
-
 TABLES = (
     "sessions",
     "turns",
     "llm_calls",
     "tool_calls",
-    "pricing_snapshots",
     "import_files",
     "metric_points",
     "telemetry_logs",
@@ -79,11 +75,72 @@ def verify(path: Path, actual: object) -> None:
 def seed(binary: Path, home: Path, sessions: Path) -> None:
     home.mkdir(parents=True, exist_ok=True)
     sessions.mkdir(parents=True, exist_ok=True)
-    events = base_events() + [
-        token_event("2026-08-12T00:00:04Z", (100, 60, 0, 10, 4, 110)),
-        complete_event(),
+    usage = {
+        "input_tokens": 100,
+        "cached_input_tokens": 60,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 10,
+        "reasoning_output_tokens": 4,
+        "total_tokens": 110,
+    }
+    events = [
+        {
+            "timestamp": "2026-08-12T00:00:00Z",
+            "type": "session_meta",
+            "payload": {
+                "id": "release-guard-thread",
+                "cwd": "/work/release-guard",
+                "cli_version": "0.146.1",
+                "model_provider": "openai",
+            },
+        },
+        {
+            "timestamp": "2026-08-12T00:00:01Z",
+            "type": "turn_context",
+            "payload": {
+                "turn_id": "release-guard-turn",
+                "model": "gpt-5.6-sol",
+                "effort": "high",
+            },
+        },
+        {
+            "timestamp": "2026-08-12T00:00:02Z",
+            "type": "event_msg",
+            "payload": {
+                "type": "task_started",
+                "turn_id": "release-guard-turn",
+                "started_at": 1786492802,
+            },
+        },
+        {
+            "timestamp": "2026-08-12T00:00:04Z",
+            "type": "event_msg",
+            "payload": {
+                "type": "token_count",
+                "info": {
+                    "total_token_usage": usage,
+                    "last_token_usage": usage,
+                    "model_context_window": 258400,
+                },
+                "rate_limits": {"plan_type": "pro"},
+            },
+        },
+        {
+            "timestamp": "2026-08-12T00:00:10Z",
+            "type": "event_msg",
+            "payload": {
+                "type": "task_complete",
+                "turn_id": "release-guard-turn",
+                "duration_ms": 8000,
+                "time_to_first_token_ms": 2200,
+            },
+        },
     ]
-    write_rollout(sessions / "rollout-release-guard.jsonl", events)
+    rollout = sessions / "rollout-release-guard.jsonl"
+    rollout.write_text(
+        "\n".join(json.dumps(event) for event in events) + "\n",
+        encoding="utf-8",
+    )
     environment = os.environ.copy()
     environment["NO_COLOR"] = "1"
     subprocess.run(

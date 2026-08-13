@@ -1,13 +1,11 @@
 # Contributing
 
 Codex Meter targets Linux, macOS, and native Windows. The current implementation
-uses Rust 1.85 or newer; the legacy v0.15 Python implementation remains as a
-regression reference. Bug reports, privacy reviews, documentation fixes, and
-focused pull requests are welcome.
+uses Rust 1.85 or newer. The frozen Python v0.15 reference lives on the
+`legacy-python-v0.15` branch instead of being duplicated on `main`. Bug reports,
+privacy reviews, documentation fixes, and focused pull requests are welcome.
 
 ## Development setup
-
-For the current Rust implementation:
 
 ```bash
 cargo fmt --check
@@ -15,19 +13,17 @@ cargo clippy --all-targets -- -D warnings
 cargo test --all-targets --locked
 ```
 
-For the legacy Python compatibility suite:
+For desktop changes:
 
 ```bash
-git clone https://github.com/DelicateNorman/codex-meter.git
-cd codex-meter
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e .
-python -m unittest discover -v
+cd desktop
+npm ci
+npm run build
+npm run test:e2e
 ```
 
-On Windows PowerShell, activate the environment with `.\.venv\Scripts\Activate.ps1`. CI runs the suite on Linux, macOS arm64/x86_64, and Windows.
+CI runs the Rust suite on Linux, macOS arm64/x86_64, and Windows; desktop
+interaction, accessibility, and screenshot regression run in a browser harness.
 
 Please keep collection content-free: prompts, responses, reasoning text, commands, tool output, headers, cookies, credentials, and authentication files must never be persisted.
 
