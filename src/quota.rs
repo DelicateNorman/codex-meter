@@ -435,7 +435,11 @@ print(json.dumps({"id": 2, "result": {"rateLimits": {"limitId": "codex", "primar
             OsString::from("app-server"),
             OsString::from("--stdio"),
         ];
-        let quotas = read_weekly_quotas(&command, Duration::from_secs(5)).unwrap();
+        // Windows runners occasionally spend several seconds starting the
+        // Python process behind the `.cmd` shim. Keep the product timeout
+        // unchanged while giving this cross-process compatibility test room
+        // for a cold interpreter launch.
+        let quotas = read_weekly_quotas(&command, Duration::from_secs(20)).unwrap();
         assert_eq!(quotas.len(), 1);
         assert_eq!(quotas[0].used_percent, 37);
     }
