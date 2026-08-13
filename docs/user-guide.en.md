@@ -8,6 +8,12 @@ It does not replace the official `codex` command, and it does not clear or modif
 
 ## 1. Install
 
+### Homebrew (stable CLI)
+
+```bash
+brew install DelicateNorman/codex-meter/codex-meter
+```
+
 ### Linux and macOS
 
 Open a terminal and paste this one-line installer:

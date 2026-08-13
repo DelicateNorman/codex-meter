@@ -8,6 +8,12 @@ Codex Meter 是一个独立于 Codex CLI 的本地统计工具。它读取当前
 
 ## 1. 安装
 
+### Homebrew（稳定版 CLI）
+
+```bash
+brew install DelicateNorman/codex-meter/codex-meter
+```
+
 ### Linux 和 macOS
 
 打开终端，粘贴下面这一行：

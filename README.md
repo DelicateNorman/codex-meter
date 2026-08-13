@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/DelicateNorman/codex-meter/releases/tag/v0.17.0-beta.1"><img alt="Latest release" src="https://img.shields.io/badge/release-v0.17.0--beta.1-0a84ff?style=flat-square"></a>
-  <a href="https://github.com/DelicateNorman/codex-meter/actions/workflows/ci.yml"><img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/DelicateNorman/codex-meter/ci.yml?branch=main&style=flat-square&label=tests&color=38d996"></a>
+  <a href="https://github.com/DelicateNorman/codex-meter/actions/workflows/rust.yml"><img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/DelicateNorman/codex-meter/rust.yml?branch=main&style=flat-square&label=tests&color=38d996"></a>
   <img alt="Platforms" src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-38bdf8?style=flat-square">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-f7c948?style=flat-square"></a>
 </p>
@@ -87,6 +87,12 @@ remains fully supported and unchanged.
 ## Install
 
 Standalone installers verify the release checksum, install only for the current user, and preserve existing data under `~/.codex-meter`.
+
+### Homebrew (stable CLI)
+
+```bash
+brew install DelicateNorman/codex-meter/codex-meter
+```
 
 ### Linux and macOS
 
