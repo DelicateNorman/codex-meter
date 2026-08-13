@@ -54,6 +54,24 @@ jobs:
           cp "$source" "dist/${{ matrix.asset }}"
           "dist/${{ matrix.asset }}" --version
           "dist/${{ matrix.asset }}" --no-color demo >/dev/null
+      - name: Sign Windows executable when certificate secrets are configured
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if (-not $env:WINDOWS_CERTIFICATE -or -not $env:WINDOWS_CERTIFICATE_PASSWORD) {
+            Write-Warning "WINDOWS_CERTIFICATE secrets are not configured; publishing an unsigned executable."
+            return
+          }
+          $certificate = Join-Path $env:RUNNER_TEMP "codex-meter-signing.pfx"
+          [IO.File]::WriteAllBytes($certificate, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $signTool = (Get-Command signtool.exe -ErrorAction Stop).Source
+          & $signTool sign /fd SHA256 /td SHA256 /tr https://timestamp.digicert.com /f $certificate /p $env:WINDOWS_CERTIFICATE_PASSWORD "dist/${{ matrix.asset }}"
+          if ($LASTEXITCODE -ne 0) { throw "Windows code signing failed" }
+          & $signTool verify /pa /v "dist/${{ matrix.asset }}"
+          if ($LASTEXITCODE -ne 0) { throw "Windows signature verification failed" }
       - name: Create platform checksum
         shell: python {0}
         run: |
@@ -125,10 +143,55 @@ jobs:
       - name: Build frontend for Tauri macros
         working-directory: desktop
         run: npm run build
+      - name: Run desktop interaction, accessibility, and screenshot regression
+        working-directory: desktop
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:e2e
       - name: Check desktop Rust bridge
         run: cargo clippy --manifest-path desktop/src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+      - name: Detect Apple Developer ID credentials
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if test -n "$APPLE_CERTIFICATE" && test -n "$APPLE_CERTIFICATE_PASSWORD" && test -n "$APPLE_ID" && test -n "$APPLE_PASSWORD" && test -n "$APPLE_TEAM_ID"; then
+            echo "APPLE_SIGNING_READY=true" >> "$GITHUB_ENV"
+          else
+            echo "APPLE_SIGNING_READY=false" >> "$GITHUB_ENV"
+            echo "::warning::Apple Developer ID secrets are incomplete; the app will be ad-hoc signed and cannot be notarized."
+          fi
+      - name: Import Apple Developer ID certificate
+        if: env.APPLE_SIGNING_READY == 'true'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -eu
+          certificate="$RUNNER_TEMP/codex-meter-signing.p12"
+          keychain="$RUNNER_TEMP/codex-meter-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$certificate"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$certificate" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          identity="$(security find-identity -v -p codesigning "$keychain" | awk -F\" '/Developer ID Application/{print $2; exit}')"
+          test -n "$identity"
+          echo "APPLE_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
       - name: Build native app and DMG
         working-directory: desktop
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npm run tauri -- build --bundles app,dmg
       - name: Validate and stage DMG
         shell: bash
@@ -145,6 +208,17 @@ jobs:
           mkdir -p dist
           cp "${dmgs[0]}" "dist/${{ matrix.asset }}"
           test -s "dist/${{ matrix.asset }}"
+          codesign --verify --deep --strict --verbose=2 "$app"
+      - name: First launch creates only private metadata state
+        run: sh tests/desktop_first_launch.sh "desktop/src-tauri/target/release/bundle/macos/Codex Meter.app/Contents/MacOS/codex-meter-desktop"
+      - name: Verify notarization ticket and Gatekeeper acceptance
+        if: env.APPLE_SIGNING_READY == 'true'
+        shell: bash
+        run: |
+          set -eu
+          app="desktop/src-tauri/target/release/bundle/macos/Codex Meter.app"
+          xcrun stapler validate "dist/${{ matrix.asset }}"
+          spctl --assess --type execute --verbose=2 "$app"
       - uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.asset }}

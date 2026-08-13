@@ -1,0 +1,40 @@
+name: Homebrew formula
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packaging/homebrew/**"
+      - ".github/workflows/homebrew.yml"
+  pull_request:
+    paths:
+      - "packaging/homebrew/**"
+      - ".github/workflows/homebrew.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: Install · ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            label: Apple Silicon
+          - os: macos-15-intel
+            label: Intel
+    steps:
+      - uses: actions/checkout@v6
+      - name: Audit formula
+        run: brew audit --strict --formula packaging/homebrew/Formula/codex-meter.rb
+      - name: Install released binary through Homebrew
+        run: |
+          set -eu
+          brew install --formula "$(pwd)/packaging/homebrew/Formula/codex-meter.rb"
+          codex-meter --version | grep -F "0.16.1"
+          codex-meter --no-color demo >/dev/null
+          brew uninstall codex-meter

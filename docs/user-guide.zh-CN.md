@@ -239,14 +239,18 @@ Reasoning out 29.7% of output
 
 ### 为什么价格有 `N/A`？
 
-`N/A` 表示该模型在当前价格表中没有可信价格。常见情况包括：
+`N/A` 不再是一个含糊的状态，程序会区分：
 
-- 内部模型；
-- 自动审查模型；
-- 新模型还没有加入价格表；
-- 原始记录没有准确模型名。
+- **没有公开价格**：内部模型、审查模型或新模型暂时没有可信价格；
+- **缺少模型信息**：原始记录没有明确模型名；
+- **历史估算**：调用时间早于价格表最早生效日期，程序使用最早可信价格计入总价，并明确标成 estimated。
 
-Codex Meter 会把这些调用计入 Token 和次数，但不会为它们编造价格。顶部黄色提示会说明有多少调用未计价。
+调用次数和 Token 始终会统计；只有前两类不会计入金额。可以查看或在线更新经过校验的价格目录：
+
+```bash
+codex-meter pricing
+codex-meter pricing --update
+```
 
 ## 7. 按项目统计
 
@@ -271,7 +275,7 @@ codex-meter projects
 
 如果你在 Codex 桌面端里通过 SSH 打开远程项目，Codex 实际运行在远程服务器，Rollout 也默认写在远程服务器的 `~/.codex/sessions`。因此旧版本只扫描 Mac 本地时，看不到这部分 Token。
 
-从 0.15.0 开始，可以把 SSH 主机添加为统计数据源。远程服务器不需要安装 Codex Meter，只需能从 Mac 正常 SSH 登录。远程主机有 Python 3 时会使用快速隐私过滤协议；`tar` 用于兼容较旧的主机环境。
+从 0.15.0 开始，可以把 SSH 主机添加为统计数据源。远程服务器不需要安装 Codex Meter，只需能从 Mac 正常 SSH 登录。远程主机使用 Python 3 执行隐私过滤；如果没有 Python 3，程序会明确提示并停止，而不会传输原始 Rollout。
 
 先确认 Mac 终端能使用与 Codex 桌面端相同的 SSH 别名：
 
@@ -307,7 +311,7 @@ codex-meter remote sync devbox
 codex-meter remote remove devbox
 ```
 
-首次同步需要读取已有历史，界面会显示文件数和源数据字节进度；之后只处理新增或发生变化的 Rollout。远程主机有 Python 3 时，过滤直接在服务器上完成，SSH 只传输 gzip 压缩后的 Token、模型、时间、项目等白名单元数据，提示词、回答、推理、命令和工具输出都不会传到 Mac。如果界面明确显示 `legacy full transfer`，说明远程没有 Python 3，程序会使用兼容旧路径：原始内容只通过加密内存流，不会写入 Mac 数据库或临时文件。`remote remove` 只停止后续同步，不会删除已经统计的数据。
+首次同步需要读取已有历史，界面会显示文件数和源数据字节进度；之后只处理新增或发生变化的 Rollout。过滤直接在服务器上完成，SSH 只传输 gzip 压缩后的 Token、模型、时间、项目等白名单元数据，提示词、回答、推理、命令和工具输出都不会传到 Mac。`remote remove` 只停止后续同步，不会删除已经统计的数据。
 
 如果添加失败，先在普通终端解决 `ssh devbox` 的登录、Host Key 或密钥问题。自动同步使用非交互模式，不会在界面背后等待密码输入。
 
@@ -638,25 +642,17 @@ codex-meter doctor
 
 ## 17. 从源码运行
 
-需要 Python 3.11 或更高版本：
+安装稳定版 Rust 1.85 或更高版本：
 
 ```bash
 git clone https://github.com/DelicateNorman/codex-meter.git
 cd codex-meter
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e .
-python -m unittest discover -v
-codex-meter
+cargo test --all-targets --locked
+cargo build --release --locked
+./target/release/codex-meter
 ```
 
-Windows PowerShell 激活命令：
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-更完整的构建说明见 [从源码构建](build-from-source.md)。
+不需要 Python。Windows 产物是 `target\release\codex-meter.exe`。更完整的桌面版和平台构建说明见 [从源码构建](build-from-source.md)。
 
 ## 18. 隐私原则
 

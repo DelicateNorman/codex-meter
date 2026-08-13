@@ -37,6 +37,16 @@ jobs:
           cache-dependency-path: desktop/package-lock.json
       - run: npm ci
       - run: npm run build
+      - name: Install browser for desktop interaction tests
+        run: npx playwright install --with-deps chromium
+      - name: Interaction, accessibility, and screenshot regression
+        run: npm run test:e2e
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: desktop-test-results
+          path: desktop/test-results
+          if-no-files-found: ignore
 
   macos-bundle:
     name: ${{ matrix.label }} app + DMG
@@ -85,6 +95,8 @@ jobs:
           test -f desktop/src-tauri/target/release/bundle/dmg/*.dmg
           /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$app/Contents/Info.plist" | grep -F "com.delicatenorman.codexmeter"
           file "$app/Contents/MacOS/codex-meter-desktop"
+      - name: First launch creates only private metadata state
+        run: sh tests/desktop_first_launch.sh "desktop/src-tauri/target/release/bundle/macos/Codex Meter.app/Contents/MacOS/codex-meter-desktop"
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}

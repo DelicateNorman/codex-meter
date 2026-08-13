@@ -239,14 +239,21 @@ The two percentages use different denominators and should not be compared direct
 
 ### Why does a price show `N/A`?
 
-`N/A` means that Codex Meter does not have a trustworthy price for that model. Common reasons include:
+`N/A` is classified instead of silently omitted:
 
-- an internal model;
-- an automatic review model;
-- a newly released model that is not yet in the catalog;
-- missing or ambiguous model information in the original record.
+- **No published price**: an internal, review, or new model has no price in the
+  current catalog;
+- **Missing model metadata**: the original record does not identify a model;
+- **Historical estimate**: the call predates the earliest known price, so Codex
+  Meter includes it using that earliest price and marks it as estimated.
 
-The calls and tokens still count, but Codex Meter does not invent a price. A yellow warning tells you how many calls were excluded from the cost estimate.
+Calls and tokens are always counted. Only the first two categories are excluded
+from cost. Check or update the checksum-verified catalog with:
+
+```bash
+codex-meter pricing
+codex-meter pricing --update
+```
 
 ## 7. Filter by project
 
@@ -271,7 +278,7 @@ Without `--project`, reports always include all projects.
 
 When Codex Desktop opens a project over SSH, Codex runs on that server and normally writes its Rollouts to the server's `~/.codex/sessions`. A Mac-only local scan therefore cannot see those tokens.
 
-Starting with version 0.15.0, an SSH host can be configured as another history source. Codex Meter does not need to be installed on the remote server. The Mac must be able to connect through SSH. Python 3 on the remote host enables the fast privacy-filtered protocol; `tar` provides compatibility for older hosts.
+Starting with version 0.15.0, an SSH host can be configured as another history source. Codex Meter does not need to be installed on the remote server. The Mac must be able to connect through SSH. Python 3 on the remote host provides the privacy filter. If it is unavailable, Codex Meter stops with an actionable message instead of transferring raw Rollouts.
 
 First verify that the SSH alias used by Codex Desktop also works in the Mac terminal:
 
@@ -307,7 +314,12 @@ codex-meter remote sync devbox
 codex-meter remote remove devbox
 ```
 
-The first sync reads existing history and displays per-file/source-byte progress. Later syncs process only new or changed Rollouts. With Python 3 available remotely, filtering happens on the server and only gzip-compressed token/model/timing/project metadata crosses SSH; prompts, responses, reasoning, commands, and tool output do not. If the UI explicitly says `legacy full transfer`, the remote host lacks Python 3 and the compatible older path is active: raw content passes only through encrypted memory and is still never written to the Mac database or a temporary Rollout file.
+The first sync reads existing history and displays per-file/source-byte progress.
+Later syncs process only new or changed Rollouts. Filtering happens on the
+server and only gzip-compressed token/model/timing/project metadata crosses SSH;
+prompts, responses, reasoning, commands, and tool output do not. A remote host
+without Python 3 is rejected with an actionable message instead of using a raw
+transfer fallback.
 
 `remote remove` stops future synchronization but intentionally keeps statistics that were already imported.
 
@@ -647,25 +659,19 @@ Do not upload `auth.json`, access tokens, complete Rollouts, prompts, or respons
 
 ## 17. Run from source
 
-Python 3.11 or newer is required:
+Install stable Rust 1.85 or newer:
 
 ```bash
 git clone https://github.com/DelicateNorman/codex-meter.git
 cd codex-meter
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e .
-python -m unittest discover -v
-codex-meter
+cargo test --all-targets --locked
+cargo build --release --locked
+./target/release/codex-meter
 ```
 
-On Windows PowerShell, activate the environment with:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-See [Build from source](build-from-source.md) for wheels and platform-specific notes.
+Python is not required. On Windows run
+`target\release\codex-meter.exe`. See [Build from source](build-from-source.md)
+for the desktop build and platform-specific notes.
 
 ## 18. Privacy principles
 

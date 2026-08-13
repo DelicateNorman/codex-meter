@@ -2,6 +2,38 @@
 
 All notable changes to Codex Meter are documented here.
 
+## [Unreleased]
+
+### Added
+
+- Add desktop History and Insights pages, dated report navigation, project and
+  optional account filters, CSV export, cache/retry/performance/network detail,
+  remote status/testing/per-server refresh, parallel sync, and cancellation.
+- Add `⌘R`, `⌘,`, and `⌘1`/`⌘2`/`⌘3` desktop shortcuts plus automated light and
+  dark screenshot regression, interaction, and accessibility tests.
+- Add checksum-verified `pricing --update`, a versioned 2026-08-14 catalog, a
+  Homebrew formula, performance budgets, and conditional Apple/Windows signing.
+
+### Fixed
+
+- Backfill known-model calls that predate the earliest catalog entry using a
+  clearly marked historical estimate. On the audited local database copy this
+  restored 8,388 previously omitted calls and changed all-time API equivalent
+  from roughly $1,267 to $2,076 without modifying token totals.
+- Distinguish missing model metadata, unpublished prices, and historical price
+  estimates instead of showing one ambiguous `N/A` count.
+- Apply date, project, and account filters consistently to desktop Sessions,
+  response performance, and Network observations.
+
+### Changed
+
+- Render cached database results before background local/quota/remote refresh;
+  synchronize multiple SSH sources in parallel and persist safe status only.
+- Require Python 3 on SSH sources so prompts and responses are removed before
+  transfer; raw Rollout fallback is no longer used.
+- Freeze the Python v0.15 implementation on `legacy-python-v0.15` and remove its
+  duplicate runtime, packaging, tests, and workflows from `main`.
+
 ## [0.17.0-beta.1] - 2026-08-13
 
 ### Added

@@ -53,10 +53,12 @@ about 6 MB. The app and CLI share the same Rust collector, privacy filters,
 pricing catalog, SSH metadata synchronizer, and `~/.codex-meter` database, so
 opening either one preserves the same history.
 
-The desktop overview includes live weekly limits, Today/Week/Month/All time,
-project filtering, response health, models, recent sessions, refresh progress,
-and remote-server management. Apple Silicon and Intel `.app`/`.dmg` bundles are
-built and validated on real macOS GitHub runners.
+The desktop app includes live weekly limits; dated Day/Week/Month/All-time
+reports; daily, weekly, and monthly history; project and optional account
+filters; cache, retry, response-speed, and network insights; CSV export; recent
+sessions; and remote-server status, testing, progress, cancellation, and
+per-server refresh. Apple Silicon and Intel `.app`/`.dmg` bundles are built and
+validated on real macOS GitHub runners.
 
 The public preview DMGs are unsigned and not notarized because the project does
 not yet use a paid Apple Developer ID. Download the matching build directly:
@@ -175,7 +177,8 @@ codex-meter remote add devbox                    # add an SSH history source
 | `codex-meter export` | JSON, JSONL, or CSV metadata export |
 | `codex-meter watch` | Periodically refresh and redraw |
 | `codex-meter statusline` | One compact shell/footer line |
-| `codex-meter pricing` | Bundled versioned price catalog |
+| `codex-meter pricing` | Show the bundled and locally installed versioned price catalog |
+| `codex-meter pricing --update` | Download, checksum, validate, and install the current catalog |
 | `codex-meter demo` | Deterministic UI preview without usage data |
 
 </details>
@@ -220,7 +223,13 @@ codex-meter remote sync          # update all sources now
 codex-meter remote remove devbox # stop future syncs
 ```
 
-On hosts with Python 3, a temporary standard-library filter runs on the server: it scans the source bytes there, removes prompts, responses, reasoning, commands, and tool output, then sends only a gzip-compressed metadata stream over SSH. The CLI and dashboard show per-file/source-byte progress. If Python 3 is unavailable, the UI explicitly reports `legacy full transfer`; the older encrypted in-memory stream remains compatible and still never writes raw Rollouts locally. Only normalized usage/timing/project metadata is retained. Removing a source stops future updates but deliberately keeps its already imported statistics.
+A temporary Python 3 standard-library filter runs on the server: it scans the
+source bytes there, removes prompts, responses, reasoning, commands, and tool
+output, then sends only a gzip-compressed metadata stream over SSH. The CLI and
+dashboard show per-file/source-byte progress. If Python 3 is unavailable, sync
+stops with an actionable message instead of transferring a raw Rollout. Only
+normalized usage/timing/project metadata is retained. Removing a source stops
+future updates but deliberately keeps its already imported statistics.
 
 As a real-world check, 60 Rollouts totaling 678 MiB on the development host produced a 2.17 MiB filtered stream—a 99.7% reduction—while matching every exported call from a full local parse.
 
@@ -275,7 +284,17 @@ Every metric records its source, confidence, and whether it was estimated. Missi
 | Weekly account limits | App Server `account/rateLimits/read` | live backend value |
 | Network/TLS setup | probe, passive metadata, or local proxy | exact at selected layer |
 
-Pricing is data-driven in [`codex_meter/data/pricing.json`](codex_meter/data/pricing.json). The calculator separates regular input, cached reads, cache writes, and output. Reasoning tokens are already part of output and are never charged twice.
+Pricing is data-driven and versioned in
+[`codex_meter/data/pricing.json`](codex_meter/data/pricing.json). Run
+`codex-meter pricing --update` to download the current catalog; Codex Meter
+verifies its SHA-256 and schema before atomically replacing the local copy. The
+calculator separates regular input, cached reads, cache writes, and output.
+Reasoning tokens are already part of output and are never charged twice.
+
+Cost coverage is explicit instead of one ambiguous `N/A`: a call can be missing
+model metadata, use a model without a published price, or use the earliest known
+price as a clearly marked historical estimate when the call predates the
+catalog. Calls and tokens are always counted even when cost cannot be estimated.
 
 ## Optional live observability
 
@@ -341,23 +360,29 @@ Trust the generated local CA only for the diagnostic window and remove that trus
 
 ## Build from source
 
-Python 3.11 or newer is required only for source builds:
+Install stable Rust 1.85 or newer:
 
 ```bash
 git clone https://github.com/DelicateNorman/codex-meter.git
 cd codex-meter
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e .
-python -m unittest discover -v
-codex-meter
+cargo test --all-targets --locked
+cargo build --release --locked
+./target/release/codex-meter
 ```
 
-On Windows PowerShell, activate with `.\.venv\Scripts\Activate.ps1`. See the complete [source-build guide](docs/build-from-source.md) for wheels and platform notes.
+On Windows the final path is `target\release\codex-meter.exe`. Python is not
+required. See the complete [source-build guide](docs/build-from-source.md) for
+desktop and platform notes. The frozen Python v0.15 source remains available on
+the [`legacy-python-v0.15`](https://github.com/DelicateNorman/codex-meter/tree/legacy-python-v0.15)
+branch.
 
 ## Development status
 
-Codex Meter is pre-1.0 software. The current release includes checksum-verified binaries; macOS notarization and Windows code signing remain future work. Experimental Codex surfaces stay behind adapters and capability detection, and missing metrics fail gracefully to `Unknown`/`N/A`.
+Codex Meter is pre-1.0 software. Releases include checksum-verified binaries;
+the CI signing and notarization paths are ready but remain inactive until the
+project has Apple Developer ID and Windows certificate secrets. Experimental
+Codex surfaces stay behind adapters and capability detection, and missing
+metrics fail gracefully to `Unknown`/`N/A`.
 
 A version-pinned upstream patch for a native Codex `/meter` command is available under [`integrations/`](integrations/), but it is never applied to the installed Codex binary automatically.
 

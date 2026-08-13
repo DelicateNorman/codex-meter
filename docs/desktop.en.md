@@ -9,10 +9,11 @@ change Codex Desktop. It reads the same metadata already used by the
 
 - current Codex and Spark seven-day account limits;
 - token usage, API-equivalent cost, cache efficiency, calls, and sessions;
-- Today, current Week, current Month, and All time views;
-- per-project filtering, with recently used projects first;
-- response timing, model and reasoning-effort breakdowns;
-- recent sessions and incremental local/SSH refresh progress.
+- dated Day, Week, Month, and All-time views, plus calendar history;
+- project and optional manual account filters;
+- cache savings, retries, response speed, and metadata-only network insights;
+- CSV export, recent sessions, and incremental local/SSH refresh progress;
+- per-server online tests, status, errors, refresh, and safe cancellation.
 
 The first refresh imports existing Rollout metadata. Later refreshes skip
 unchanged files. A failed remote server is reported without hiding successfully
@@ -35,8 +36,12 @@ same metadata-only SSH filter as the CLI.
 2. Choose Today, Week, Month, or All time at the top of Overview.
 3. Leave Project on **All projects**, or select one project.
 4. Click the circular arrow to import changed local and remote metadata.
-5. Open Sessions for recent work, or Settings to inspect data paths and manage
-   SSH aliases.
+5. Open History, Insights, or Sessions for detail; Settings manages account
+   labels, the pricing catalog, data paths, and SSH aliases.
+
+Use `⌘R` to refresh, `⌘,` for Settings, and `⌘1`/`⌘2`/`⌘3` to switch among
+Overview, History, and Insights. Date arrows move the selected report window;
+Export writes only filtered statistical metadata to CSV.
 
 Weekly account limits load in parallel and are independent of the selected
 date or project. If they are unavailable, confirm `codex --version` works in a
