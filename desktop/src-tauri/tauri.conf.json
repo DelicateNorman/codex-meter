@@ -10,6 +10,7 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
         "label": "main",
@@ -21,9 +22,15 @@
         "center": true,
         "resizable": true,
         "fullscreen": false,
+        "transparent": true,
         "hiddenTitle": true,
         "titleBarStyle": "Overlay",
-        "trafficLightPosition": { "x": 18, "y": 21 }
+        "trafficLightPosition": { "x": 18, "y": 21 },
+        "windowEffects": {
+          "effects": ["windowBackground"],
+          "state": "followsWindowActiveState",
+          "radius": 12
+        }
       }
     ],
     "security": {

@@ -186,30 +186,35 @@ function shell(): string {
     <button class="nav-item ${state.page === page ? "active" : ""}" data-page="${page}">
       ${icon}<span>${label}</span>
     </button>`;
+  const pageTitle = state.page === "overview" ? "Overview" : state.page === "sessions" ? "Sessions" : "Settings";
   return `
     <div class="app-shell">
       <aside class="sidebar" data-tauri-drag-region>
         <div class="traffic-space" data-tauri-drag-region></div>
         <div class="brand" data-tauri-drag-region>
           <div class="brand-mark"><span></span><span></span><span></span></div>
-          <div><strong>Codex Meter</strong><small>Local observability</small></div>
+          <div><strong>Codex Meter</strong><small>Usage at a glance</small></div>
         </div>
+        <div class="nav-label">Workspace</div>
         <nav>
           ${nav("overview", "Overview", icons.overview)}
           ${nav("sessions", "Sessions", icons.sessions)}
           ${nav("settings", "Settings", icons.settings)}
         </nav>
         <div class="sidebar-spacer"></div>
-        <div class="privacy-chip"><span></span><div><strong>Local only</strong><small>Content is never stored</small></div></div>
-        <div class="version">Codex Meter Desktop · 0.17.0-beta.1</div>
+        <div class="privacy-chip"><span></span><div><strong>Private by design</strong><small>Conversation content is never stored</small></div></div>
+        <div class="version">Version 0.17.0 beta</div>
       </aside>
       <main class="main-area">
         <header class="topbar" data-tauri-drag-region>
           <div data-tauri-drag-region>
-            <h1>${state.page === "overview" ? "Usage overview" : state.page === "sessions" ? "Recent sessions" : "Settings"}</h1>
-            <p>${state.snapshot ? `${escapeHtml(state.snapshot.ownerUsername)} · ${state.snapshot.remoteCount ? `${state.snapshot.remoteCount} remote source${state.snapshot.remoteCount === 1 ? "" : "s"}` : "This Mac"}` : "This Mac"}</p>
+            <span class="eyebrow">Codex Meter</span>
+            <h1>${pageTitle}</h1>
           </div>
-          <button class="icon-button refresh-button ${state.busy ? "spinning" : ""}" title="Refresh" ${state.busy ? "disabled" : ""}>${icons.refresh}</button>
+          <div class="topbar-actions">
+            <div class="source-pill"><span></span><div><strong>${state.snapshot ? escapeHtml(state.snapshot.ownerUsername) : "Local user"}</strong><small>${state.snapshot?.remoteCount ? `This Mac + ${state.snapshot.remoteCount} remote` : "This Mac"}</small></div></div>
+            <button class="icon-button refresh-button ${state.busy ? "spinning" : ""}" title="Refresh usage" aria-label="Refresh usage" ${state.busy ? "disabled" : ""}>${icons.refresh}</button>
+          </div>
         </header>
         <section class="page-content">
           ${state.error ? `<div class="banner error"><strong>Refresh needs attention</strong><span>${escapeHtml(state.error)}</span><button data-dismiss-error>Dismiss</button></div>` : ""}
@@ -244,7 +249,7 @@ function overviewView(): string {
       <label class="select-wrap"><span>Project</span><select id="project-select">${projectOptions.join("")}</select></label>
     </div>
     <div class="quota-section">
-      <div class="section-heading"><div><h2>Account weekly limits</h2><p>Live from the active Codex account · independent of filters</p></div></div>
+      <div class="section-heading"><div><span class="section-kicker">Live account</span><h2>Weekly allowance</h2><p>Independent of the date and project filters above</p></div></div>
       <div class="quota-grid">${quotaCards()}</div>
     </div>
     <div class="metric-grid">
@@ -273,7 +278,7 @@ function overviewView(): string {
 }
 
 function metricCard(label: string, value: string, detail: string, color: string): string {
-  return `<article class="metric-card ${color}"><span>${label}</span><strong>${value}</strong><small>${detail}</small></article>`;
+  return `<article class="metric-card ${color}"><i class="metric-accent"></i><span>${label}</span><strong>${value}</strong><small>${detail}</small></article>`;
 }
 
 function quotaCards(): string {
@@ -283,7 +288,7 @@ function quotaCards(): string {
     const reset = quota.resetsAt ? new Date(quota.resetsAt * 1000).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Unknown";
     const remaining = Math.max(0, 100 - quota.usedPercent);
     return `<article class="quota-card">
-      <div class="quota-head"><div><span class="status-dot"></span><strong>${escapeHtml(quota.name)}</strong></div><b>${remaining}% left</b></div>
+      <div class="quota-head"><div><span class="status-dot"></span><div><small>7-day limit</small><strong>${escapeHtml(quota.name)}</strong></div></div><b>${remaining}% <small>left</small></b></div>
       <div class="quota-track"><i style="width:${quota.usedPercent}%"></i></div>
       <div class="quota-meta"><span>${quota.usedPercent}% used</span><span>Resets ${reset}</span></div>
     </article>`;
