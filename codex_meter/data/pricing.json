@@ -1,5 +1,5 @@
 {
-  "catalog_version": "openai-2026-08-12",
+  "catalog_version": "openai-2026-08-14",
   "currency": "USD",
   "unit": "per_million_tokens",
   "source": "https://developers.openai.com/api/docs/models",
@@ -42,6 +42,19 @@
       "long_context_threshold": 272000,
       "long_context_input_multiplier": 2.0,
       "long_context_output_multiplier": 1.5
+    },
+    {
+      "model": "gpt-5.3-codex",
+      "provider": "openai",
+      "effective_from": "2026-08-14T00:00:00Z",
+      "version": "openai-2026-08-14",
+      "input_per_million": 1.75,
+      "cached_input_per_million": 0.175,
+      "cache_write_per_million": 1.75,
+      "output_per_million": 14.0,
+      "long_context_threshold": null,
+      "long_context_input_multiplier": 1.0,
+      "long_context_output_multiplier": 1.0
     },
     {
       "model": "gpt-5.5",

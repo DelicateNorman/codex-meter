@@ -4,7 +4,7 @@ use std::{
     collections::HashMap,
     fs,
     path::{Path, PathBuf},
-    time::UNIX_EPOCH,
+    time::{Duration, UNIX_EPOCH},
 };
 
 use anyhow::{Context, Result, bail};
@@ -33,6 +33,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
     (
         "003",
         include_str!("../codex_meter/migrations/003_local_identity.sql"),
+    ),
+    (
+        "004",
+        include_str!("../codex_meter/migrations/004_remote_source_status.sql"),
     ),
 ];
 
@@ -90,6 +94,8 @@ pub struct Overview {
     pub total_tokens: i64,
     pub cost_usd: Option<f64>,
     pub unpriced_calls: i64,
+    pub missing_model_calls: i64,
+    pub unpublished_price_calls: i64,
     pub historical_price_estimate_calls: i64,
     pub avg_ttft_ms: Option<f64>,
     pub avg_e2e_ms: Option<f64>,
@@ -205,7 +211,8 @@ pub struct LiveCallTimings<'a> {
     pub transport: Option<&'a str>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AccountUsage {
     pub account: String,
     pub sessions: i64,
@@ -267,7 +274,8 @@ pub struct ToolUsage {
     pub total_ms: Option<i64>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResponsePerformance {
     pub completed_at: Option<String>,
     pub local_time: Option<String>,
@@ -310,6 +318,18 @@ pub struct TelemetryRetrySummary {
     pub failures: i64,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteSourceStatus {
+    pub host: String,
+    pub last_attempt_at: Option<String>,
+    pub last_success_at: Option<String>,
+    pub last_error_kind: Option<String>,
+    pub discovered_files: i64,
+    pub imported_files: i64,
+    pub skipped_files: i64,
+}
+
 pub struct Storage {
     pub path: PathBuf,
     pub owner_uid: Option<i64>,
@@ -344,6 +364,7 @@ impl Storage {
         }
         let connection =
             Connection::open(&path).with_context(|| format!("open database {}", path.display()))?;
+        connection.busy_timeout(Duration::from_secs(5))?;
         connection.execute_batch(
             "PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;",
         )?;
@@ -1168,6 +1189,8 @@ impl Storage {
                    COALESCE(SUM(c.cache_write_tokens),0), COALESCE(SUM(c.output_tokens),0),
                    COALESCE(SUM(c.reasoning_tokens),0), COALESCE(SUM(c.total_tokens),0),
                    SUM(c.cost_usd), COALESCE(SUM(CASE WHEN c.cost_usd IS NULL THEN 1 ELSE 0 END),0),
+                   COALESCE(SUM(CASE WHEN c.cost_usd IS NULL AND NULLIF(TRIM(COALESCE(c.actual_model,c.model,'')),'') IS NULL THEN 1 ELSE 0 END),0),
+                   COALESCE(SUM(CASE WHEN c.cost_usd IS NULL AND NULLIF(TRIM(COALESCE(c.actual_model,c.model,'')),'') IS NOT NULL THEN 1 ELSE 0 END),0),
                    COALESCE(SUM(CASE WHEN c.pricing_version LIKE '%:historical-estimate' THEN 1 ELSE 0 END),0),
                    tm.avg_ttft_ms, tm.avg_e2e_ms
             FROM filtered_calls c CROSS JOIN turn_metrics tm"#
@@ -1186,9 +1209,11 @@ impl Storage {
                     total_tokens: row.get(8)?,
                     cost_usd: row.get(9)?,
                     unpriced_calls: row.get(10)?,
-                    historical_price_estimate_calls: row.get(11)?,
-                    avg_ttft_ms: row.get(12)?,
-                    avg_e2e_ms: row.get(13)?,
+                    missing_model_calls: row.get(11)?,
+                    unpublished_price_calls: row.get(12)?,
+                    historical_price_estimate_calls: row.get(13)?,
+                    avg_ttft_ms: row.get(14)?,
+                    avg_e2e_ms: row.get(15)?,
                 })
             })
             .map_err(Into::into)
@@ -1268,6 +1293,49 @@ impl Storage {
         self.recent_sessions(limit)
     }
 
+    pub fn sessions_filtered(
+        &self,
+        limit: usize,
+        filter: UsageFilter<'_>,
+    ) -> Result<Vec<SessionSummary>> {
+        let (where_sql, mut values) = self.owned_filter("c.completed_at", filter);
+        values.push(Value::Integer(limit.max(1) as i64));
+        let sql = format!(
+            r#"WITH filtered_calls AS (
+                    SELECT c.session_id,c.turn_id,c.total_tokens,c.cost_usd,
+                           c.cached_input_tokens,c.input_tokens,c.completed_at
+                    FROM llm_calls c JOIN sessions s ON s.id=c.session_id {where_sql}
+                ), call_totals AS (
+                    SELECT session_id,COUNT(*) calls,COUNT(DISTINCT turn_id) turns,
+                           SUM(total_tokens) total_tokens,SUM(cost_usd) cost_usd,
+                           SUM(cached_input_tokens) cached_input_tokens,
+                           SUM(input_tokens) input_tokens,MAX(completed_at) last_used_at
+                    FROM filtered_calls GROUP BY session_id
+                )
+                SELECT s.codex_thread_id,s.project_name,s.started_at,s.ended_at,
+                       c.turns,c.calls,COALESCE(c.total_tokens,0),c.cost_usd,
+                       COALESCE(c.cached_input_tokens,0),COALESCE(c.input_tokens,0)
+                FROM sessions s JOIN call_totals c ON c.session_id=s.id
+                ORDER BY COALESCE(c.last_used_at,s.started_at) DESC LIMIT ?"#
+        );
+        let mut statement = self.connection.prepare(&sql)?;
+        let rows = statement.query_map(params_from_iter(values.iter()), |row| {
+            Ok(SessionSummary {
+                codex_thread_id: row.get(0)?,
+                project_name: row.get(1)?,
+                started_at: row.get(2)?,
+                ended_at: row.get(3)?,
+                turns: row.get(4)?,
+                calls: row.get(5)?,
+                total_tokens: row.get(6)?,
+                cost_usd: row.get(7)?,
+                cached_input_tokens: row.get(8)?,
+                input_tokens: row.get(9)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
     pub fn account_breakdown(&self) -> Result<Vec<AccountUsage>> {
         let (where_sql, values) = self.owned_filter("c.completed_at", UsageFilter::default());
         let sql = format!(
@@ -1289,6 +1357,14 @@ impl Storage {
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub fn account_names(&self) -> Result<Vec<String>> {
+        Ok(self
+            .account_breakdown()?
+            .into_iter()
+            .map(|row| row.account)
+            .collect())
     }
 
     pub fn usage_history(
@@ -1492,14 +1568,15 @@ impl Storage {
     }
 
     pub fn usage_calls(&self, day: Option<&str>) -> Result<Vec<UsageCall>> {
-        let (where_sql, values) = self.owned_filter(
-            "c.completed_at",
-            UsageFilter {
-                from_date: day,
-                to_date: day,
-                ..Default::default()
-            },
-        );
+        self.usage_calls_range(UsageFilter {
+            from_date: day,
+            to_date: day,
+            ..Default::default()
+        })
+    }
+
+    pub fn usage_calls_range(&self, filter: UsageFilter<'_>) -> Result<Vec<UsageCall>> {
+        let (where_sql, values) = self.owned_filter("c.completed_at", filter);
         let sql = format!(
             r#"SELECT c.event_fingerprint,t.codex_turn_id,c.response_id,c.completed_at,c.model,
                       c.actual_model,c.provider,c.reasoning_effort,c.reasoning_mode,c.service_tier,
@@ -1749,21 +1826,41 @@ impl Storage {
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
+    pub fn recent_network_filtered(
+        &self,
+        limit: usize,
+        filter: UsageFilter<'_>,
+    ) -> Result<Vec<NetworkFlowRecord>> {
+        let base_columns = "nf.event_fingerprint,nf.mode,nf.data_source,nf.started_at,nf.ended_at,nf.destination_host,nf.destination_ip,nf.destination_port,nf.protocol,nf.tls_version,nf.alpn,nf.http_status,nf.request_bytes,nf.response_bytes,nf.packets_out,nf.packets_in,nf.dns_ms,nf.tcp_ms,nf.tls_ms,nf.ttfb_ms,nf.first_event_ms,nf.first_output_ms,nf.duration_ms,nf.success,nf.error_type,nf.thread_id,nf.turn_id,nf.response_id,nf.confidence";
+        let (where_sql, mut values) = self.owned_filter("nf.started_at", filter);
+        values.push(Value::Integer(limit.max(1) as i64));
+        let sql = format!(
+            "SELECT {base_columns} FROM network_flows nf JOIN sessions s ON s.codex_thread_id=nf.thread_id {where_sql} ORDER BY COALESCE(nf.started_at,nf.created_at) DESC LIMIT ?"
+        );
+        let mut statement = self.connection.prepare(&sql)?;
+        let rows = statement.query_map(params_from_iter(values.iter()), network_from_row)?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
     pub fn response_performance_range(
         &self,
         from_date: Option<&str>,
         to_date: Option<&str>,
         project: Option<&str>,
     ) -> Result<Vec<ResponsePerformance>> {
-        let (where_sql, values) = self.owned_filter(
-            "t.completed_at",
-            UsageFilter {
-                from_date,
-                to_date,
-                project,
-                account: None,
-            },
-        );
+        self.response_performance_filtered(UsageFilter {
+            from_date,
+            to_date,
+            project,
+            account: None,
+        })
+    }
+
+    pub fn response_performance_filtered(
+        &self,
+        filter: UsageFilter<'_>,
+    ) -> Result<Vec<ResponsePerformance>> {
+        let (where_sql, values) = self.owned_filter("t.completed_at", filter);
         let sql = format!(
             r#"SELECT t.completed_at,strftime('%H:%M:%S',t.completed_at,'localtime'),
                       COALESCE(t.model,'Unknown'),t.output_tokens,t.ttft_ms,t.e2e_ms,
@@ -1784,6 +1881,82 @@ impl Storage {
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub fn remote_source_status(&self, host: &str) -> Result<RemoteSourceStatus> {
+        self.connection
+            .query_row(
+                r#"SELECT host,last_attempt_at,last_success_at,last_error_kind,
+                          discovered_files,imported_files,skipped_files
+                   FROM remote_source_status WHERE host=?1"#,
+                [host],
+                |row| {
+                    Ok(RemoteSourceStatus {
+                        host: row.get(0)?,
+                        last_attempt_at: row.get(1)?,
+                        last_success_at: row.get(2)?,
+                        last_error_kind: row.get(3)?,
+                        discovered_files: row.get(4)?,
+                        imported_files: row.get(5)?,
+                        skipped_files: row.get(6)?,
+                    })
+                },
+            )
+            .optional()
+            .map(|row| {
+                row.unwrap_or_else(|| RemoteSourceStatus {
+                    host: host.to_string(),
+                    ..RemoteSourceStatus::default()
+                })
+            })
+            .map_err(Into::into)
+    }
+
+    pub fn record_remote_attempt(&self, host: &str) -> Result<()> {
+        self.connection.execute(
+            r#"INSERT INTO remote_source_status(host,last_attempt_at,last_error_kind)
+               VALUES (?1,CURRENT_TIMESTAMP,NULL)
+               ON CONFLICT(host) DO UPDATE SET
+                   last_attempt_at=CURRENT_TIMESTAMP,last_error_kind=NULL"#,
+            [host],
+        )?;
+        Ok(())
+    }
+
+    pub fn record_remote_success(
+        &self,
+        host: &str,
+        discovered_files: usize,
+        imported_files: usize,
+        skipped_files: usize,
+    ) -> Result<()> {
+        self.connection.execute(
+            r#"INSERT INTO remote_source_status(
+                   host,last_attempt_at,last_success_at,last_error_kind,
+                   discovered_files,imported_files,skipped_files
+               ) VALUES (?1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,NULL,?2,?3,?4)
+               ON CONFLICT(host) DO UPDATE SET
+                   last_attempt_at=CURRENT_TIMESTAMP,last_success_at=CURRENT_TIMESTAMP,
+                   last_error_kind=NULL,discovered_files=?2,imported_files=?3,skipped_files=?4"#,
+            params![
+                host,
+                saturating_i64(discovered_files as u64),
+                saturating_i64(imported_files as u64),
+                saturating_i64(skipped_files as u64)
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn record_remote_failure(&self, host: &str, kind: &str) -> Result<()> {
+        self.connection.execute(
+            r#"INSERT INTO remote_source_status(host,last_attempt_at,last_error_kind)
+               VALUES (?1,CURRENT_TIMESTAMP,?2)
+               ON CONFLICT(host) DO UPDATE SET
+                   last_attempt_at=CURRENT_TIMESTAMP,last_error_kind=?2"#,
+            params![host, kind],
+        )?;
+        Ok(())
     }
 
     pub fn telemetry_retry_summary(&self, day: Option<&str>) -> Result<TelemetryRetrySummary> {
@@ -2318,6 +2491,65 @@ mod tests {
         let stats = storage.backfill_unpriced_calls(&catalog).unwrap();
         assert_eq!(stats.newly_priced_calls, 0);
         assert_eq!(stats.still_unpriced_calls, 1);
+        let overview = storage.overview_range(UsageFilter::default()).unwrap();
+        assert_eq!(overview.unpublished_price_calls, 1);
+        assert_eq!(overview.missing_model_calls, 0);
+        storage
+            .connection
+            .execute("UPDATE llm_calls SET model=NULL,actual_model=NULL", [])
+            .unwrap();
+        let overview = storage.overview_range(UsageFilter::default()).unwrap();
+        assert_eq!(overview.unpublished_price_calls, 0);
+        assert_eq!(overview.missing_model_calls, 1);
+    }
+
+    #[test]
+    fn month_range_excludes_older_calls_while_all_time_includes_them() {
+        let temp = tempdir().unwrap();
+        let storage =
+            Storage::with_identity(temp.path().join("meter.db"), Some(501), "tester", None)
+                .unwrap();
+        storage.migrate().unwrap();
+        let catalog = PricingCatalog::bundled().unwrap();
+        let collector = SessionCollector::new(&catalog);
+
+        for (source, thread, turn, timestamp) in [
+            ("july", "thread-july", "turn-july", "2026-07-20T01:00:00Z"),
+            (
+                "august",
+                "thread-august",
+                "turn-august",
+                "2026-08-12T01:00:00Z",
+            ),
+        ] {
+            let parsed = collector
+                .collect_reader(Cursor::new(fixture(thread, turn, timestamp)), source)
+                .unwrap();
+            storage
+                .import_session(
+                    &parsed,
+                    SourceMetadata {
+                        source_path: source.into(),
+                        size_bytes: 10,
+                        mtime_ns: 1,
+                    },
+                )
+                .unwrap();
+        }
+
+        let month = storage
+            .overview_range(UsageFilter {
+                from_date: Some("2026-08-01"),
+                to_date: Some("2026-08-31"),
+                ..UsageFilter::default()
+            })
+            .unwrap();
+        let all_time = storage.overview_range(UsageFilter::default()).unwrap();
+
+        assert_eq!((month.calls, month.total_tokens), (1, 110));
+        assert_eq!((all_time.calls, all_time.total_tokens), (2, 220));
+        assert!(all_time.cost_usd.unwrap() > month.cost_usd.unwrap());
+        assert_eq!(all_time.historical_price_estimate_calls, 1);
     }
 
     #[test]
@@ -2574,6 +2806,81 @@ mod tests {
                 .unwrap()
                 .len(),
             1
+        );
+        assert_eq!(
+            storage
+                .recent_network_filtered(
+                    10,
+                    UsageFilter {
+                        from_date: Some("2026-08-12"),
+                        to_date: Some("2026-08-12"),
+                        project: Some("live-project"),
+                        account: Some("work"),
+                    },
+                )
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(
+            storage
+                .recent_network_filtered(
+                    10,
+                    UsageFilter {
+                        from_date: Some("2026-08-13"),
+                        to_date: Some("2026-08-13"),
+                        project: Some("live-project"),
+                        account: Some("work"),
+                    },
+                )
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            storage
+                .sessions_filtered(
+                    10,
+                    UsageFilter {
+                        from_date: Some("2026-08-12"),
+                        to_date: Some("2026-08-12"),
+                        project: Some("live-project"),
+                        account: Some("work"),
+                    },
+                )
+                .unwrap()[0]
+                .calls,
+            1
+        );
+        assert!(
+            storage
+                .sessions_filtered(
+                    10,
+                    UsageFilter {
+                        from_date: Some("2026-08-12"),
+                        to_date: Some("2026-08-12"),
+                        project: Some("other-project"),
+                        account: Some("work"),
+                    },
+                )
+                .unwrap()
+                .is_empty()
+        );
+        storage.record_remote_attempt("devbox").unwrap();
+        storage.record_remote_success("devbox", 12, 3, 9).unwrap();
+        let remote = storage.remote_source_status("devbox").unwrap();
+        assert_eq!((remote.discovered_files, remote.imported_files), (12, 3));
+        assert!(remote.last_success_at.is_some());
+        assert!(remote.last_error_kind.is_none());
+        storage
+            .record_remote_failure("devbox", "connection")
+            .unwrap();
+        assert_eq!(
+            storage
+                .remote_source_status("devbox")
+                .unwrap()
+                .last_error_kind
+                .as_deref(),
+            Some("connection")
         );
         assert_eq!(
             storage

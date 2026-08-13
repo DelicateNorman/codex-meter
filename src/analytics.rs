@@ -164,12 +164,12 @@ pub fn cache_summary(rows: &[UsageSample], catalog: &PricingCatalog) -> CacheSum
         output.input_tokens += row.usage.input_tokens;
         output.cached_input_tokens += row.usage.cached_input_tokens;
         output.cache_write_tokens += row.usage.cache_write_tokens;
-        if let Some(price) = catalog.resolve(
+        if let Some(resolved) = catalog.resolve_for_estimate(
             row.model.as_deref(),
             row.provider.as_deref(),
             row.completed_at.as_deref(),
         ) {
-            let cost = catalog.calculate(row.usage, price);
+            let cost = catalog.calculate(row.usage, resolved.price);
             output.observed_cost_usd += cost.total_usd;
             output.without_cache_usd += cost.without_cache_usd;
             output.savings_usd += cost.savings_usd;

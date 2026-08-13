@@ -365,7 +365,26 @@ pub fn sync_with_progress(
     force: bool,
     on_progress: impl FnMut(&SyncProgress),
 ) -> Result<SyncResult> {
-    sync_with_progress_using(storage, catalog, host, force, "ssh", on_progress)
+    sync_with_progress_until(storage, catalog, host, force, on_progress, || false)
+}
+
+pub fn sync_with_progress_until(
+    storage: &mut Storage,
+    catalog: &PricingCatalog,
+    host: &str,
+    force: bool,
+    on_progress: impl FnMut(&SyncProgress),
+    should_cancel: impl FnMut() -> bool,
+) -> Result<SyncResult> {
+    sync_with_progress_using(
+        storage,
+        catalog,
+        host,
+        force,
+        "ssh",
+        on_progress,
+        should_cancel,
+    )
 }
 
 fn sync_with_progress_using(
@@ -375,9 +394,17 @@ fn sync_with_progress_using(
     force: bool,
     ssh: &str,
     mut on_progress: impl FnMut(&SyncProgress),
+    mut should_cancel: impl FnMut() -> bool,
 ) -> Result<SyncResult> {
-    let files = list_with_ssh(host, ssh)?;
     let host = validate_remote_host(host)?;
+    storage.record_remote_attempt(&host)?;
+    let files = match list_with_ssh(&host, ssh) {
+        Ok(files) => files,
+        Err(error) => {
+            let _ = storage.record_remote_failure(&host, "connection");
+            return Err(error);
+        }
+    };
     let mut result = SyncResult {
         host: host.clone(),
         discovered_files: files.len(),
@@ -394,7 +421,13 @@ fn sync_with_progress_using(
         }
     }
     let total_source_bytes = changed.iter().map(|file| file.size_bytes).sum();
-    let server_filtered = !changed.is_empty() && remote_has_python(&host, ssh)?;
+    let server_filtered = true;
+    if !changed.is_empty() && !remote_has_python(&host, ssh)? {
+        let _ = storage.record_remote_failure(&host, "remote_runtime");
+        bail!(
+            "{host}: Python 3 is required on the remote host so Codex Meter can remove prompts and responses before transfer"
+        );
+    }
     let mut completed_files = 0;
     let mut completed_source_bytes = 0_u64;
     on_progress(&SyncProgress {
@@ -409,6 +442,10 @@ fn sync_with_progress_using(
     let collector = SessionCollector::new(catalog);
     let skipped_files = result.skipped_files;
     for batch in changed.chunks(64) {
+        if should_cancel() {
+            let _ = storage.record_remote_failure(&host, "cancelled");
+            bail!("{host}: remote sync cancelled");
+        }
         let mut file_completed = |file: &RemoteFile| {
             completed_files += 1;
             completed_source_bytes = completed_source_bytes.saturating_add(file.size_bytes);
@@ -422,16 +459,30 @@ fn sync_with_progress_using(
                 server_filtered,
             });
         };
-        import_batch(
+        if let Err(error) = import_batch(
             storage,
             &collector,
             batch,
             &mut result,
             ssh,
-            server_filtered,
             &mut file_completed,
-        )?;
+            &mut should_cancel,
+        ) {
+            let kind = if error.to_string().contains("cancelled") {
+                "cancelled"
+            } else {
+                "import"
+            };
+            let _ = storage.record_remote_failure(&host, kind);
+            return Err(error);
+        }
     }
+    storage.record_remote_success(
+        &host,
+        result.discovered_files,
+        result.imported_files,
+        result.skipped_files,
+    )?;
     Ok(result)
 }
 
@@ -457,8 +508,8 @@ fn import_batch(
     files: &[RemoteFile],
     result: &mut SyncResult,
     ssh: &str,
-    server_filtered: bool,
     on_file: &mut impl FnMut(&RemoteFile),
+    should_cancel: &mut impl FnMut() -> bool,
 ) -> Result<()> {
     if files.is_empty() {
         return Ok(());
@@ -473,11 +524,7 @@ fn import_batch(
         .map(|file| shell_quote(&file.relative_path))
         .collect::<Vec<_>>()
         .join(" ");
-    let remote_command = if server_filtered {
-        format!("python3 - {paths}")
-    } else {
-        format!("tar -C \"$HOME/.codex/sessions\" -cf - {paths}")
-    };
+    let remote_command = format!("python3 - {paths}");
     let mut command = Command::new(ssh);
     command
         .args(ssh_options())
@@ -485,31 +532,28 @@ fn import_batch(
         .arg(remote_command)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    if server_filtered {
-        command.stdin(Stdio::piped());
-    }
+    command.stdin(Stdio::piped());
     let mut child = command
         .spawn()
         .with_context(|| "OpenSSH client was not found; install `ssh` first")?;
-    if server_filtered {
-        child
-            .stdin
-            .take()
-            .context("SSH did not expose the metadata-filter script input")?
-            .write_all(FILTER_SCRIPT.as_bytes())?;
-    }
+    child
+        .stdin
+        .take()
+        .context("SSH did not expose the metadata-filter script input")?
+        .write_all(FILTER_SCRIPT.as_bytes())?;
     let stdout = child
         .stdout
         .take()
         .context("SSH did not expose its Rollout stream")?;
-    let stream: Box<dyn Read> = if server_filtered {
-        Box::new(flate2::read::GzDecoder::new(stdout))
-    } else {
-        Box::new(stdout)
-    };
+    let stream: Box<dyn Read> = Box::new(flate2::read::GzDecoder::new(stdout));
     let mut archive = tar::Archive::new(stream);
     let mut seen = std::collections::HashSet::new();
     for entry in archive.entries().context("read remote Rollout archive")? {
+        if should_cancel() {
+            let _ = child.kill();
+            let _ = child.wait();
+            bail!("{host}: remote sync cancelled");
+        }
         let mut entry = entry.context("read remote Rollout entry")?;
         if !entry.header().entry_type().is_file() {
             continue;
@@ -798,6 +842,7 @@ mod tests {
             false,
             fake_ssh.to_str().unwrap(),
             |progress| updates.push(progress.clone()),
+            || false,
         )
         .unwrap();
         assert_eq!(result.discovered_files, 1);
@@ -835,9 +880,35 @@ mod tests {
             false,
             fake_ssh.to_str().unwrap(),
             |_| {},
+            || false,
         )
         .unwrap();
         assert_eq!(replay.imported_files, 0);
         assert_eq!(replay.skipped_files, 1);
+
+        let mut cancellation_checks = 0;
+        let error = sync_with_progress_using(
+            &mut storage,
+            &catalog,
+            "devbox",
+            true,
+            fake_ssh.to_str().unwrap(),
+            |_| {},
+            || {
+                cancellation_checks += 1;
+                cancellation_checks > 1
+            },
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("cancelled"));
+        assert_eq!(
+            storage
+                .remote_source_status("devbox")
+                .unwrap()
+                .last_error_kind
+                .as_deref(),
+            Some("cancelled")
+        );
     }
 }

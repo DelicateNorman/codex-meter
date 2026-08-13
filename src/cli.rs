@@ -158,7 +158,11 @@ pub enum Command {
     /// Detect available Codex data sources and schema capabilities.
     Doctor,
     /// List the versioned pricing catalog.
-    Pricing,
+    Pricing {
+        /// Download and checksum-verify the latest versioned catalog.
+        #[arg(long)]
+        update: bool,
+    },
     /// Render a deterministic dashboard preview.
     Demo,
 }
@@ -396,8 +400,17 @@ fn dispatch(args: Args) -> Result<()> {
     let identity = config::identity(&home);
     let remotes = config::remote_hosts(&home);
     let db_path = db.unwrap_or_else(|| home.join("meter.db"));
-    let catalog = PricingCatalog::from_path(&home.join("pricing.json"))
-        .or_else(|_| PricingCatalog::bundled())?;
+    if matches!(command, Some(Command::Pricing { update: true })) {
+        let catalog =
+            crate::pricing::update_catalog(&home.join("pricing.json"), Duration::from_secs(15))?;
+        println!(
+            "Updated pricing catalog to {} ({} entries)",
+            catalog.catalog_version,
+            catalog.entries.len()
+        );
+        return Ok(());
+    }
+    let catalog = PricingCatalog::load_with_bundled(&home.join("pricing.json"))?;
     let mut storage = open_storage(&db_path, &identity, &catalog)?;
     let color = !no_color && std::env::var_os("NO_COLOR").is_none() && io::stdout().is_terminal();
 
@@ -413,7 +426,8 @@ fn dispatch(args: Args) -> Result<()> {
             )?;
         }
         Some(Command::Doctor) => print_doctor(&storage)?,
-        Some(Command::Pricing) => print_pricing(&catalog),
+        Some(Command::Pricing { update: false }) => print_pricing(&catalog),
+        Some(Command::Pricing { update: true }) => unreachable!(),
         Some(Command::Account { command }) => account_command(&storage, &identity, command)?,
         Some(Command::Remote { command }) => {
             remote_command(&mut storage, &catalog, &home, command)?
@@ -1010,6 +1024,8 @@ impl From<crate::storage::Overview> for tui::Overview {
             total_tokens: row.total_tokens,
             cost_usd: row.cost_usd,
             unpriced_calls: row.unpriced_calls,
+            missing_model_calls: row.missing_model_calls,
+            unpublished_price_calls: row.unpublished_price_calls,
             historical_price_estimate_calls: row.historical_price_estimate_calls,
             calls: row.calls,
             sessions: row.sessions,

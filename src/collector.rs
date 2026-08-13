@@ -839,6 +839,89 @@ mod tests {
     }
 
     #[test]
+    fn newer_rollout_fields_and_unknown_events_are_forward_compatible() {
+        let secret = "FUTURE-PRIVATE-CONTENT";
+        let events = vec![
+            json!({
+                "timestamp": "2026-08-14T00:00:00Z",
+                "type": "session_meta",
+                "payload": {
+                    "id": "future-thread",
+                    "cwd": "/work/future-project",
+                    "cli_version": "0.200.0",
+                    "model_provider": "openai",
+                    "future_session_field": secret,
+                },
+                "schema_version": 99,
+            }),
+            json!({
+                "timestamp": "2026-08-14T00:00:01Z",
+                "type": "future_top_level_record",
+                "payload": {"content": secret},
+            }),
+            json!({
+                "timestamp": "2026-08-14T00:00:02Z",
+                "type": "turn_context",
+                "payload": {
+                    "turn_id": "future-turn",
+                    "model": "gpt-5.6-sol",
+                    "effort": "medium",
+                    "future_context_field": {"prompt": secret},
+                },
+            }),
+            json!({
+                "timestamp": "2026-08-14T00:00:03Z",
+                "type": "event_msg",
+                "payload": {
+                    "type": "future_event",
+                    "turn_id": "future-turn",
+                    "message": secret,
+                },
+            }),
+            json!({
+                "timestamp": "2026-08-14T00:00:04Z",
+                "type": "event_msg",
+                "payload": {
+                    "type": "rawResponse/completed",
+                    "turn_id": "future-turn",
+                    "response_id": "future-response",
+                    "usage": {
+                        "input_tokens": 120,
+                        "cached_input_tokens": 80,
+                        "output_tokens": 15,
+                        "reasoning_output_tokens": 5,
+                        "total_tokens": 135,
+                        "future_usage_field": 123,
+                    },
+                    "future_response_field": secret,
+                },
+            }),
+        ];
+        let input = events
+            .into_iter()
+            .map(|event| event.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let parsed = SessionCollector::new(&catalog())
+            .collect_reader(Cursor::new(input), "future-rollout")
+            .unwrap();
+
+        assert_eq!(parsed.session.codex_version.as_deref(), Some("0.200.0"));
+        assert_eq!(
+            parsed.session.project_name.as_deref(),
+            Some("future-project")
+        );
+        assert_eq!(parsed.llm_calls.len(), 1);
+        assert_eq!(parsed.llm_calls[0].model.as_deref(), Some("gpt-5.6-sol"));
+        assert_eq!(parsed.llm_calls[0].usage.input_tokens, 120);
+        assert_eq!(parsed.llm_calls[0].usage.cached_input_tokens, 80);
+        assert_eq!(parsed.llm_calls[0].usage.output_tokens, 15);
+        assert_eq!(parsed.llm_calls[0].usage.reasoning_tokens, 5);
+        assert!(!format!("{parsed:?}").contains(secret));
+    }
+
+    #[test]
     fn cumulative_deltas_tools_timings_and_malformed_lines_match_python() {
         let usage = |input, cached, write, output, reasoning, total| {
             json!({

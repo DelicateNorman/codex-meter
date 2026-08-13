@@ -5,14 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",
-    "build": "tsc --noEmit && vite build",
+    "build": "node ../scripts/sync-versions.mjs --check && tsc --noEmit && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test:e2e": "playwright test",
+    "test:e2e:update": "playwright test --update-snapshots"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.62.1",
     "@tauri-apps/cli": "2.11.4",
     "typescript": "7.0.2",
     "vite": "8.2.1"

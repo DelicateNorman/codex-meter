@@ -24,6 +24,8 @@ pub struct Overview {
     pub total_tokens: i64,
     pub cost_usd: Option<f64>,
     pub unpriced_calls: i64,
+    pub missing_model_calls: i64,
+    pub unpublished_price_calls: i64,
     pub historical_price_estimate_calls: i64,
     pub calls: i64,
     pub sessions: i64,
@@ -237,11 +239,18 @@ pub fn render_overview(
         options.color,
     ));
     if overview.unpriced_calls != 0 {
+        let reason = match (
+            overview.unpublished_price_calls,
+            overview.missing_model_calls,
+        ) {
+            (published, 0) => format!("{published} call(s) have no published model price"),
+            (0, missing) => format!("{missing} call(s) lack a model name in the Rollout"),
+            (published, missing) => {
+                format!("{published} call(s) have no published price; {missing} lack a model name")
+            }
+        };
         lines.push(frame(
-            &format!(
-                "△ {} call(s) have unknown pricing; cost excludes them",
-                overview.unpriced_calls
-            ),
+            &format!("△ {reason}; cost excludes them"),
             inner,
             YELLOW,
             true,
@@ -1009,6 +1018,8 @@ mod tests {
     fn overview_warns_for_unpriced_calls_and_limits_model_rows_to_eight() {
         let overview = Overview {
             unpriced_calls: 3,
+            unpublished_price_calls: 2,
+            missing_model_calls: 1,
             historical_price_estimate_calls: 8,
             ..Overview::default()
         };
@@ -1023,7 +1034,7 @@ mod tests {
             &models,
             &OverviewOptions::new("TODAY", 100, false),
         );
-        assert!(rendered.contains("3 call(s) have unknown pricing"));
+        assert!(rendered.contains("2 call(s) have no published price; 1 lack a model name"));
         assert!(rendered.contains("8 earlier call(s) use the earliest known model price"));
         assert!(rendered.contains("model-7"));
         assert!(!rendered.contains("model-8"));
