@@ -29,12 +29,18 @@ jobs:
             label: Intel
     steps:
       - uses: actions/checkout@v6
+      - name: Stage formula as a local tap
+        run: |
+          set -eu
+          brew tap-new --no-git DelicateNorman/codex-meter
+          tap_root="$(brew --repository DelicateNorman/codex-meter)"
+          cp packaging/homebrew/Formula/codex-meter.rb "$tap_root/Formula/codex-meter.rb"
       - name: Audit formula
-        run: brew audit --strict --formula packaging/homebrew/Formula/codex-meter.rb
+        run: brew audit --strict --formula DelicateNorman/codex-meter/codex-meter
       - name: Install released binary through Homebrew
         run: |
           set -eu
-          brew install --formula "$(pwd)/packaging/homebrew/Formula/codex-meter.rb"
+          brew install --formula DelicateNorman/codex-meter/codex-meter
           codex-meter --version | grep -F "0.16.1"
           codex-meter --no-color demo >/dev/null
           brew uninstall codex-meter
