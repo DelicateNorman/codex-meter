@@ -41,6 +41,25 @@ pub struct CostBreakdown {
     pub pricing_version: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ResolvedPrice<'a> {
+    pub price: &'a Price,
+    /// The usage predates the first price we know for this model. The price is
+    /// useful for an API-equivalent estimate, but must not be presented as the
+    /// model's exact historical list price.
+    pub historical_estimate: bool,
+}
+
+impl ResolvedPrice<'_> {
+    pub fn version(&self) -> String {
+        if self.historical_estimate {
+            format!("{}:historical-estimate", self.price.version)
+        } else {
+            self.price.version.clone()
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct PricingCatalog {
     pub entries: Vec<Price>,
@@ -100,6 +119,38 @@ impl PricingCatalog {
             .max_by(|left, right| left.effective_from.cmp(&right.effective_from))
     }
 
+    /// Resolve a price for an API-equivalent estimate. Calls before the first
+    /// known price for an otherwise known model use that earliest price and are
+    /// explicitly marked as historical estimates. Unknown models remain
+    /// unpriced instead of silently borrowing another model's rate.
+    pub fn resolve_for_estimate<'a>(
+        &'a self,
+        model: Option<&str>,
+        provider: Option<&str>,
+        at: Option<&str>,
+    ) -> Option<ResolvedPrice<'a>> {
+        if let Some(price) = self.resolve(model, provider, at) {
+            return Some(ResolvedPrice {
+                price,
+                historical_estimate: false,
+            });
+        }
+
+        let model = normalize_model(model?);
+        let provider = provider.unwrap_or("openai");
+        let at = parse_time(at?)?;
+        let price = self
+            .entries
+            .iter()
+            .filter(|entry| entry.model == model && entry.provider == provider)
+            .filter_map(|entry| parse_time(&entry.effective_from).map(|time| (entry, time)))
+            .min_by_key(|(_, effective)| *effective)?;
+        (at < price.1).then_some(ResolvedPrice {
+            price: price.0,
+            historical_estimate: true,
+        })
+    }
+
     pub fn calculate(&self, usage: TokenUsage, price: &Price) -> CostBreakdown {
         let (input_multiplier, output_multiplier) = match price.long_context_threshold {
             Some(threshold) if usage.input_tokens > threshold => (
@@ -135,6 +186,13 @@ impl PricingCatalog {
             savings_usd: without_cache - total,
             pricing_version: price.version.clone(),
         }
+    }
+}
+
+fn normalize_model(model: &str) -> &str {
+    match model {
+        "gpt-5.6" => "gpt-5.6-sol",
+        value => value,
     }
 }
 
@@ -179,5 +237,37 @@ mod tests {
         };
         let cost = catalog.calculate(usage, price);
         assert!((cost.total_usd - 7.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn historical_estimates_use_earliest_known_rate_without_pricing_unknown_models() {
+        let catalog = PricingCatalog::bundled().unwrap();
+        assert!(
+            catalog
+                .resolve(
+                    Some("gpt-5.6-sol"),
+                    Some("openai"),
+                    Some("2026-07-20T00:00:00Z")
+                )
+                .is_none()
+        );
+        let resolved = catalog
+            .resolve_for_estimate(
+                Some("gpt-5.6-sol"),
+                Some("openai"),
+                Some("2026-07-20T00:00:00Z"),
+            )
+            .unwrap();
+        assert!(resolved.historical_estimate);
+        assert!(resolved.version().ends_with(":historical-estimate"));
+        assert!(
+            catalog
+                .resolve_for_estimate(
+                    Some("codex-auto-review"),
+                    Some("openai"),
+                    Some("2026-08-10T00:00:00Z")
+                )
+                .is_none()
+        );
     }
 }

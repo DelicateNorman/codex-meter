@@ -69,6 +69,13 @@ impl SourceMetadata {
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct ImportStats(pub usize, pub usize, pub usize);
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct RepriceStats {
+    pub newly_priced_calls: usize,
+    pub historical_estimates: usize,
+    pub still_unpriced_calls: usize,
+}
+
 #[derive(Debug, Default, Clone, PartialEq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Overview {
@@ -83,6 +90,7 @@ pub struct Overview {
     pub total_tokens: i64,
     pub cost_usd: Option<f64>,
     pub unpriced_calls: i64,
+    pub historical_price_estimate_calls: i64,
     pub avg_ttft_ms: Option<f64>,
     pub avg_e2e_ms: Option<f64>,
 }
@@ -419,6 +427,86 @@ impl Storage {
         }
         transaction.commit()?;
         Ok(())
+    }
+
+    /// Fill costs that were previously unavailable. Known models observed
+    /// before their earliest catalog entry are backcast using that entry and
+    /// tagged as historical estimates; genuinely unknown models stay NULL.
+    pub fn backfill_unpriced_calls(&self, catalog: &PricingCatalog) -> Result<RepriceStats> {
+        #[derive(Debug)]
+        struct PendingCall {
+            id: i64,
+            model: Option<String>,
+            actual_model: Option<String>,
+            provider: Option<String>,
+            at: Option<String>,
+            usage: TokenUsage,
+        }
+
+        let pending = {
+            let mut statement = self.connection.prepare(
+                r#"SELECT id,model,actual_model,provider,COALESCE(completed_at,started_at),
+                          input_tokens,cached_input_tokens,cache_write_tokens,output_tokens,
+                          reasoning_tokens,total_tokens
+                   FROM llm_calls WHERE cost_usd IS NULL"#,
+            )?;
+            statement
+                .query_map([], |row| {
+                    Ok(PendingCall {
+                        id: row.get(0)?,
+                        model: row.get(1)?,
+                        actual_model: row.get(2)?,
+                        provider: row.get(3)?,
+                        at: row.get(4)?,
+                        usage: TokenUsage {
+                            input_tokens: row.get(5)?,
+                            cached_input_tokens: row.get(6)?,
+                            cache_write_tokens: row.get(7)?,
+                            output_tokens: row.get(8)?,
+                            reasoning_tokens: row.get(9)?,
+                            total_tokens: row.get(10)?,
+                        },
+                    })
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?
+        };
+
+        let mut stats = RepriceStats::default();
+        let transaction = self.connection.unchecked_transaction()?;
+        for call in pending {
+            let model = call.actual_model.as_deref().or(call.model.as_deref());
+            let Some(resolved) =
+                catalog.resolve_for_estimate(model, call.provider.as_deref(), call.at.as_deref())
+            else {
+                stats.still_unpriced_calls += 1;
+                continue;
+            };
+            let cost = catalog.calculate(call.usage, resolved.price);
+            transaction.execute(
+                r#"UPDATE llm_calls
+                   SET cost_usd=?1, pricing_version=?2,
+                       estimated=CASE WHEN ?3 THEN 1 ELSE estimated END
+                   WHERE id=?4"#,
+                params![
+                    cost.total_usd,
+                    resolved.version(),
+                    resolved.historical_estimate,
+                    call.id
+                ],
+            )?;
+            stats.newly_priced_calls += 1;
+            stats.historical_estimates += usize::from(resolved.historical_estimate);
+        }
+        if stats.newly_priced_calls > 0 {
+            transaction.execute(
+                r#"UPDATE turns SET cost_usd=(
+                       SELECT SUM(cost_usd) FROM llm_calls WHERE llm_calls.turn_id=turns.id
+                   )"#,
+                [],
+            )?;
+        }
+        transaction.commit()?;
+        Ok(stats)
     }
 
     pub fn file_is_current(&self, path: &Path) -> Result<bool> {
@@ -1080,6 +1168,7 @@ impl Storage {
                    COALESCE(SUM(c.cache_write_tokens),0), COALESCE(SUM(c.output_tokens),0),
                    COALESCE(SUM(c.reasoning_tokens),0), COALESCE(SUM(c.total_tokens),0),
                    SUM(c.cost_usd), COALESCE(SUM(CASE WHEN c.cost_usd IS NULL THEN 1 ELSE 0 END),0),
+                   COALESCE(SUM(CASE WHEN c.pricing_version LIKE '%:historical-estimate' THEN 1 ELSE 0 END),0),
                    tm.avg_ttft_ms, tm.avg_e2e_ms
             FROM filtered_calls c CROSS JOIN turn_metrics tm"#
         );
@@ -1097,8 +1186,9 @@ impl Storage {
                     total_tokens: row.get(8)?,
                     cost_usd: row.get(9)?,
                     unpriced_calls: row.get(10)?,
-                    avg_ttft_ms: row.get(11)?,
-                    avg_e2e_ms: row.get(12)?,
+                    historical_price_estimate_calls: row.get(11)?,
+                    avg_ttft_ms: row.get(12)?,
+                    avg_e2e_ms: row.get(13)?,
                 })
             })
             .map_err(Into::into)
@@ -2161,6 +2251,73 @@ mod tests {
         );
         assert_eq!(storage.project_names().unwrap(), vec!["project-a"]);
         assert_eq!(storage.integrity_check().unwrap(), "ok");
+    }
+
+    #[test]
+    fn backfills_pre_catalog_history_and_keeps_unknown_models_unpriced() {
+        let temp = tempdir().unwrap();
+        let storage =
+            Storage::with_identity(temp.path().join("meter.db"), Some(501), "tester", None)
+                .unwrap();
+        storage.migrate().unwrap();
+        let catalog = PricingCatalog::bundled().unwrap();
+        let collector = SessionCollector::new(&catalog);
+        let parsed = collector
+            .collect_reader(
+                Cursor::new(fixture("thread-old", "turn-old", "2026-07-20T01:00:00Z")),
+                "old",
+            )
+            .unwrap();
+        storage
+            .import_session(
+                &parsed,
+                SourceMetadata {
+                    source_path: "old".into(),
+                    size_bytes: 10,
+                    mtime_ns: 1,
+                },
+            )
+            .unwrap();
+        storage
+            .connection
+            .execute(
+                "UPDATE llm_calls SET cost_usd=NULL,pricing_version=NULL,estimated=0",
+                [],
+            )
+            .unwrap();
+
+        let stats = storage.backfill_unpriced_calls(&catalog).unwrap();
+        assert_eq!(stats.newly_priced_calls, 1);
+        assert_eq!(stats.historical_estimates, 1);
+        let (cost, version, estimated): (Option<f64>, Option<String>, i64) = storage
+            .connection
+            .query_row(
+                "SELECT cost_usd,pricing_version,estimated FROM llm_calls",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert!(cost.is_some_and(|value| value > 0.0));
+        assert!(version.unwrap().ends_with(":historical-estimate"));
+        assert_eq!(estimated, 1);
+        assert_eq!(
+            storage
+                .overview_range(UsageFilter::default())
+                .unwrap()
+                .historical_price_estimate_calls,
+            1
+        );
+
+        storage
+            .connection
+            .execute(
+                "UPDATE llm_calls SET model='unknown-model',actual_model=NULL,cost_usd=NULL,pricing_version=NULL",
+                [],
+            )
+            .unwrap();
+        let stats = storage.backfill_unpriced_calls(&catalog).unwrap();
+        assert_eq!(stats.newly_priced_calls, 0);
+        assert_eq!(stats.still_unpriced_calls, 1);
     }
 
     #[test]

@@ -24,6 +24,7 @@ pub struct Overview {
     pub total_tokens: i64,
     pub cost_usd: Option<f64>,
     pub unpriced_calls: i64,
+    pub historical_price_estimate_calls: i64,
     pub calls: i64,
     pub sessions: i64,
     pub turns: i64,
@@ -243,6 +244,18 @@ pub fn render_overview(
             ),
             inner,
             YELLOW,
+            true,
+            options.color,
+        ));
+    }
+    if overview.historical_price_estimate_calls != 0 {
+        lines.push(frame(
+            &format!(
+                "◇ {} earlier call(s) use the earliest known model price as an estimate",
+                overview.historical_price_estimate_calls
+            ),
+            inner,
+            MUTED,
             true,
             options.color,
         ));
@@ -996,6 +1009,7 @@ mod tests {
     fn overview_warns_for_unpriced_calls_and_limits_model_rows_to_eight() {
         let overview = Overview {
             unpriced_calls: 3,
+            historical_price_estimate_calls: 8,
             ..Overview::default()
         };
         let models = (0..10)
@@ -1010,6 +1024,7 @@ mod tests {
             &OverviewOptions::new("TODAY", 100, false),
         );
         assert!(rendered.contains("3 call(s) have unknown pricing"));
+        assert!(rendered.contains("8 earlier call(s) use the earliest known model price"));
         assert!(rendered.contains("model-7"));
         assert!(!rendered.contains("model-8"));
     }

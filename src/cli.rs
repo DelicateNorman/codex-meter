@@ -518,6 +518,7 @@ fn open_storage(
     )?;
     storage.migrate()?;
     storage.sync_pricing(catalog)?;
+    storage.backfill_unpriced_calls(catalog)?;
     Ok(storage)
 }
 
@@ -1009,6 +1010,7 @@ impl From<crate::storage::Overview> for tui::Overview {
             total_tokens: row.total_tokens,
             cost_usd: row.cost_usd,
             unpriced_calls: row.unpriced_calls,
+            historical_price_estimate_calls: row.historical_price_estimate_calls,
             calls: row.calls,
             sessions: row.sessions,
             turns: row.turns,

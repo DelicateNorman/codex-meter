@@ -105,6 +105,7 @@ impl MeterService {
         )?;
         storage.migrate()?;
         storage.sync_pricing(&self.catalog)?;
+        storage.backfill_unpriced_calls(&self.catalog)?;
         Ok(storage)
     }
 

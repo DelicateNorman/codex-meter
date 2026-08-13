@@ -417,12 +417,15 @@ impl<'a> SessionCollector<'a> {
             .join("|")
         });
         let event_fingerprint = format!("{:x}", Sha256::digest(fingerprint_value.as_bytes()));
-        let price = self.pricing.resolve(
+        let resolved_price = self.pricing.resolve_for_estimate(
             context.model.as_deref(),
             Some(provider),
             timestamp.as_deref(),
         );
-        let cost = price.map(|price| self.pricing.calculate(usage, price));
+        let historical_price_estimate =
+            resolved_price.is_some_and(|resolution| resolution.historical_estimate);
+        let cost = resolved_price.map(|resolution| self.pricing.calculate(usage, resolution.price));
+        let pricing_version = resolved_price.map(|resolution| resolution.version());
         LlmCallRecord {
             event_fingerprint,
             turn_id,
@@ -439,7 +442,7 @@ impl<'a> SessionCollector<'a> {
             error_type: None,
             retry_index: 0,
             cost_usd: cost.as_ref().map(|value| value.total_usd),
-            pricing_version: cost.map(|value| value.pricing_version),
+            pricing_version,
             quality: Quality {
                 source: if exact {
                     "app_server_raw_response"
@@ -452,7 +455,7 @@ impl<'a> SessionCollector<'a> {
                 } else {
                     Confidence::Derived
                 },
-                estimated: !exact,
+                estimated: !exact || historical_price_estimate,
             },
         }
     }

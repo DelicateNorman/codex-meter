@@ -16,6 +16,7 @@ interface Overview {
   totalTokens: number;
   costUsd: number | null;
   unpricedCalls: number;
+  historicalPriceEstimateCalls: number;
   avgTtftMs: number | null;
   avgE2eMs: number | null;
 }
@@ -254,7 +255,7 @@ function overviewView(): string {
     </div>
     <div class="metric-grid">
       ${metricCard("Tokens", number(usage.totalTokens), `${number(usage.inputTokens)} input · ${number(usage.outputTokens)} output`, "cyan")}
-      ${metricCard("API equivalent", money(usage.costUsd), usage.unpricedCalls ? `${usage.unpricedCalls} unpriced calls excluded` : "All calls priced", "violet")}
+      ${metricCard("API equivalent", money(usage.costUsd), costCoverage(usage), "violet")}
       ${metricCard("Cache efficiency", `${cache.toFixed(1)}%`, `${number(usage.cachedInputTokens)} cached input`, "blue")}
       ${metricCard("Calls", number(usage.calls), `${usage.sessions} sessions · ${usage.turns} turns`, "green")}
     </div>
@@ -275,6 +276,13 @@ function overviewView(): string {
         ${modelTable(snapshot.models)}
       </article>
     </div>`;
+}
+
+function costCoverage(usage: Overview): string {
+  const details: string[] = [];
+  if (usage.unpricedCalls) details.push(`${usage.unpricedCalls} missing model prices`);
+  if (usage.historicalPriceEstimateCalls) details.push(`${usage.historicalPriceEstimateCalls} historical estimates`);
+  return details.length ? details.join(" · ") : "All calls use dated prices";
 }
 
 function metricCard(label: string, value: string, detail: string, color: string): string {
