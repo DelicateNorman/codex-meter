@@ -47,13 +47,22 @@ To add a server, first make sure `ssh alias` works from Terminal. Then open
 Settings, enter the same alias, and choose **Add server**. The first metadata
 sync can take longer; progress remains visible and later syncs are incremental.
 
-## Platform and preview builds
+## Install the public preview
 
-The current target is macOS 12 or newer on Apple Silicon and Intel. The
-[macOS desktop workflow](https://github.com/DelicateNorman/codex-meter/actions/workflows/desktop.yml)
-produces both architectures and validates each app bundle and DMG. These CI
-artifacts are unsigned development previews. A public installer should be
-Developer ID signed and notarized before general distribution.
+The current target is macOS 12 or newer. Download the DMG for your Mac:
+
+- [Apple Silicon (M1/M2/M3/M4)](https://github.com/DelicateNorman/codex-meter/releases/download/v0.17.0-beta.1/codex-meter-desktop-macos-arm64.dmg)
+- [Intel](https://github.com/DelicateNorman/codex-meter/releases/download/v0.17.0-beta.1/codex-meter-desktop-macos-x86_64.dmg)
+
+Open the DMG and drag Codex Meter into Applications. These preview builds are
+unsigned and not notarized, so macOS may block the first launch. Right-click
+Codex Meter and choose **Open**. If it is still blocked, open **System Settings
+→ Privacy & Security** and choose **Open Anyway** for Codex Meter. Only use a
+download whose SHA-256 value matches `SHA256SUMS` on the Release page.
+
+No paid Apple developer membership is required to build or test the app. A
+future generally available build should use Developer ID signing and Apple
+notarization to remove this extra first-launch step.
 
 ## Build from source
 

@@ -2,6 +2,31 @@
 
 All notable changes to Codex Meter are documented here.
 
+## [0.17.0-beta.1] - 2026-08-13
+
+### Added
+
+- Add a native macOS desktop dashboard for weekly account limits, Today/Week/
+  Month/All time usage, projects, response health, models, recent sessions,
+  refresh progress, and SSH source management.
+- Publish direct unsigned DMG downloads for Apple Silicon and Intel Macs in
+  the GitHub Release, alongside the four existing CLI binaries and one combined
+  checksum manifest.
+
+### Changed
+
+- Share the Rust collector, privacy filters, pricing catalog, SSH metadata
+  synchronizer, and `~/.codex-meter` database between the CLI and desktop app.
+- Search common Homebrew, local-bin, Volta, FNM, npm-global, and NVM locations
+  when a Finder-launched app needs to locate Codex CLI.
+
+### Verified
+
+- Build and validate both app bundles and DMGs on real Apple Silicon and Intel
+  GitHub macOS runners.
+- Keep the desktop preview explicitly unsigned and unnotarized; document the
+  macOS first-launch warning and SHA-256 verification process.
+
 ## [0.16.1] - 2026-08-13
 
 ### Fixed
@@ -194,6 +219,7 @@ First public Linux release.
 - Versioned API-equivalent pricing with unknown prices shown as `N/A`.
 - One-line, no-sudo Linux installer.
 
+[0.17.0-beta.1]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.17.0-beta.1
 [0.16.1]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.1
 [0.16.0]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.0
 [0.16.0-beta.3]: https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.0-beta.3

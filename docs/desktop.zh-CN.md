@@ -41,12 +41,20 @@ Homebrew、`~/.local/bin`、Volta、FNM、npm-global 和 NVM 的常见位置。
 输入同一个别名并点击 **Add server**。第一次元数据同步可能较久，界面会显示
 进度；以后刷新是增量的。
 
-## 平台和预览构建
+## 安装公开预览版
 
-当前主要支持 macOS 12 及以上版本，同时构建 Apple Silicon 和 Intel 两种架构。
-[macOS 桌面版工作流](https://github.com/DelicateNorman/codex-meter/actions/workflows/desktop.yml)
-会真实生成并校验两种 `.app` 和 `.dmg`。目前 CI 产物属于未签名的开发预览版；
-面向普通用户公开发布前，应配置 Apple Developer ID 签名和公证。
+当前支持 macOS 12 及以上版本，请下载与电脑相符的 DMG：
+
+- [Apple Silicon（M1/M2/M3/M4）](https://github.com/DelicateNorman/codex-meter/releases/download/v0.17.0-beta.1/codex-meter-desktop-macos-arm64.dmg)
+- [Intel](https://github.com/DelicateNorman/codex-meter/releases/download/v0.17.0-beta.1/codex-meter-desktop-macos-x86_64.dmg)
+
+打开 DMG，把 Codex Meter 拖进“应用程序”。这个预览版尚未签名和公证，macOS
+第一次打开时可能拦截。请右键点击 Codex Meter，选择“打开”；如果仍被拦截，
+前往“系统设置 → 隐私与安全性”，找到 Codex Meter 后选择“仍要打开”。下载后
+可以用 Release 页面中的 `SHA256SUMS` 核对 SHA-256。
+
+开发和测试不要求加入付费 Apple 开发者计划。未来的通用正式版应使用
+Developer ID 签名和 Apple 公证，从而去掉第一次打开时的额外步骤。
 
 ## 从源码运行
 

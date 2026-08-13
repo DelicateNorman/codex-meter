@@ -93,9 +93,67 @@ jobs:
           path: dist/${{ matrix.asset }}
           if-no-files-found: error
 
+  desktop:
+    name: Desktop DMG · ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            label: Apple Silicon
+            asset: codex-meter-desktop-macos-arm64.dmg
+          - os: macos-15-intel
+            label: Intel
+            asset: codex-meter-desktop-macos-x86_64.dmg
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+      - name: Install frontend dependencies
+        working-directory: desktop
+        run: npm ci
+      - name: Build frontend for Tauri macros
+        working-directory: desktop
+        run: npm run build
+      - name: Check desktop Rust bridge
+        run: cargo clippy --manifest-path desktop/src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+      - name: Build native app and DMG
+        working-directory: desktop
+        run: npm run tauri -- build --bundles app,dmg
+      - name: Validate and stage DMG
+        shell: bash
+        run: |
+          set -eu
+          app="desktop/src-tauri/target/release/bundle/macos/Codex Meter.app"
+          test -x "$app/Contents/MacOS/codex-meter-desktop"
+          test -f "$app/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$app/Contents/Info.plist" | grep -F "com.delicatenorman.codexmeter"
+          file "$app/Contents/MacOS/codex-meter-desktop"
+          shopt -s nullglob
+          dmgs=(desktop/src-tauri/target/release/bundle/dmg/*.dmg)
+          test "${#dmgs[@]}" -eq 1
+          mkdir -p dist
+          cp "${dmgs[0]}" "dist/${{ matrix.asset }}"
+          test -s "dist/${{ matrix.asset }}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+          if-no-files-found: error
+
   bundle:
     name: Assemble checksummed release
-    needs: binaries
+    needs: [binaries, desktop]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v8
@@ -110,8 +168,10 @@ jobs:
           test -f dist/codex-meter-macos-arm64
           test -f dist/codex-meter-macos-x86_64
           test -f dist/codex-meter-windows-x86_64.exe
+          test -f dist/codex-meter-desktop-macos-arm64.dmg
+          test -f dist/codex-meter-desktop-macos-x86_64.dmg
           cd dist
-          sha256sum codex-meter-linux-x86_64 codex-meter-macos-arm64 codex-meter-macos-x86_64 codex-meter-windows-x86_64.exe > SHA256SUMS
+          sha256sum codex-meter-linux-x86_64 codex-meter-macos-arm64 codex-meter-macos-x86_64 codex-meter-windows-x86_64.exe codex-meter-desktop-macos-arm64.dmg codex-meter-desktop-macos-x86_64.dmg > SHA256SUMS
           sha256sum --check SHA256SUMS
       - uses: actions/upload-artifact@v7
         with:
@@ -124,6 +184,7 @@ jobs:
     needs: bundle
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@v6
       - uses: actions/download-artifact@v8
         with:
           name: release-bundle
@@ -138,7 +199,12 @@ jobs:
           case "$GITHUB_REF_NAME" in
             *-*) release_flags+=(--prerelease) ;;
           esac
-          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag --title "Codex Meter $GITHUB_REF_NAME" --generate-notes "${release_flags[@]}"
+          notes_flags=(--generate-notes)
+          notes="release-notes/$GITHUB_REF_NAME.md"
+          if test -f "$notes"; then
+            notes_flags=(--notes-file "$notes")
+          fi
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag --title "Codex Meter $GITHUB_REF_NAME" "${notes_flags[@]}" "${release_flags[@]}"
 
   public-install:
     name: Public install · ${{ matrix.asset }}

@@ -13,7 +13,7 @@ Codex Meter 是一个独立于 Codex CLI 的本地统计工具。它读取当前
 打开终端，粘贴下面这一行：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.1/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.17.0-beta.1/install.sh | sh
 ```
 
 安装完成后运行：
@@ -29,7 +29,7 @@ codex-meter
 打开 PowerShell，粘贴下面这一行：
 
 ```powershell
-irm https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.1/install.ps1 | iex
+irm https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.17.0-beta.1/install.ps1 | iex
 ```
 
 安装后重新打开一个终端，再运行：
@@ -53,7 +53,7 @@ codex-meter --version
 当前版本应显示：
 
 ```text
-codex-meter 0.16.1
+codex-meter 0.17.0-beta.1
 ```
 
 如果提示找不到命令，请关闭当前终端并重新打开。Linux/macOS 还可以检查：

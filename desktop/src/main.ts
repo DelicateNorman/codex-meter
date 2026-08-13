@@ -201,7 +201,7 @@ function shell(): string {
         </nav>
         <div class="sidebar-spacer"></div>
         <div class="privacy-chip"><span></span><div><strong>Local only</strong><small>Content is never stored</small></div></div>
-        <div class="version">Codex Meter Desktop · 0.16.1</div>
+        <div class="version">Codex Meter Desktop · 0.17.0-beta.1</div>
       </aside>
       <main class="main-area">
         <header class="topbar" data-tauri-drag-region>

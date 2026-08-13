@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/DelicateNorman/codex-meter/releases/tag/v0.16.1"><img alt="Latest release" src="https://img.shields.io/badge/release-v0.16.1-0a84ff?style=flat-square"></a>
+  <a href="https://github.com/DelicateNorman/codex-meter/releases/tag/v0.17.0-beta.1"><img alt="Latest release" src="https://img.shields.io/badge/release-v0.17.0--beta.1-0a84ff?style=flat-square"></a>
   <a href="https://github.com/DelicateNorman/codex-meter/actions/workflows/ci.yml"><img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/DelicateNorman/codex-meter/ci.yml?branch=main&style=flat-square&label=tests&color=38d996"></a>
   <img alt="Platforms" src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-38bdf8?style=flat-square">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-f7c948?style=flat-square"></a>
@@ -58,11 +58,15 @@ project filtering, response health, models, recent sessions, refresh progress,
 and remote-server management. Apple Silicon and Intel `.app`/`.dmg` bundles are
 built and validated on real macOS GitHub runners.
 
-Preview CI artifacts are currently unsigned and intended for project testing.
-A normal public download will follow after Developer ID signing and Apple
-notarization are configured. See the [English desktop guide](docs/desktop.en.md)
-or [中文桌面版指南](docs/desktop.zh-CN.md) for usage, privacy, and source-build
-instructions. The terminal application remains fully supported and unchanged.
+The public preview DMGs are unsigned and not notarized because the project does
+not yet use a paid Apple Developer ID. Download the matching build directly:
+[Apple Silicon](https://github.com/DelicateNorman/codex-meter/releases/download/v0.17.0-beta.1/codex-meter-desktop-macos-arm64.dmg)
+or [Intel](https://github.com/DelicateNorman/codex-meter/releases/download/v0.17.0-beta.1/codex-meter-desktop-macos-x86_64.dmg).
+macOS may require right-clicking the app and choosing **Open**, or allowing it
+under **System Settings → Privacy & Security**. See the
+[English desktop guide](docs/desktop.en.md) or
+[中文桌面版指南](docs/desktop.zh-CN.md) for details. The terminal application
+remains fully supported and unchanged.
 
 ## Why Codex Meter?
 
@@ -85,13 +89,13 @@ Standalone installers verify the release checksum, install only for the current 
 ### Linux and macOS
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.1/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.17.0-beta.1/install.sh | sh
 ```
 
 ### Windows PowerShell
 
 ```powershell
-irm https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.16.1/install.ps1 | iex
+irm https://raw.githubusercontent.com/DelicateNorman/codex-meter/v0.17.0-beta.1/install.ps1 | iex
 ```
 
 Open a new terminal and run:

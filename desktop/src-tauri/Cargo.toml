@@ -1,6 +1,6 @@
 [package]
 name = "codex-meter-desktop"
-version = "0.16.1"
+version = "0.17.0-beta.1"
 description = "Native desktop dashboard for Codex Meter"
 authors = ["Codex Meter contributors"]
 edition = "2024"
